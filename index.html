@@ -487,7 +487,10 @@
                         </h2>
                         <p class="text-xs text-slate-400">View all connected players, their ticket IDs, ticket names, and called numbers out of 15.</p>
                     </div>
-                    <span id="all-players-count-badge" class="px-3 py-1 rounded-full bg-indigo-900/60 text-indigo-300 border border-indigo-500/30 text-xs font-bold">0 Players</span>
+                    <div class="flex items-center gap-2">
+                        <span id="all-players-count-badge" class="px-3 py-1 rounded-full bg-indigo-900/60 text-indigo-300 border border-indigo-500/30 text-xs font-bold">0 Players</span>
+                        <span id="all-tickets-count-badge" class="px-3 py-1 rounded-full bg-emerald-900/60 text-emerald-300 border border-emerald-500/30 text-xs font-bold">0 Tickets</span>
+                    </div>
                 </div>
 
                 <div id="all-players-roster-list" class="space-y-4">
@@ -713,10 +716,22 @@
         function renderAllPlayersRosterTab() {
             const listEl = document.getElementById('all-players-roster-list');
             const badgeEl = document.getElementById('all-players-count-badge');
+            const ticketsBadgeEl = document.getElementById('all-tickets-count-badge');
             if (!listEl) return;
 
             const allParticipants = getAllParticipantsList(roomRoster);
+            let totalTicketsCount = 0;
+            allParticipants.forEach(p => {
+                if (p.serializedTickets) {
+                    try {
+                        const parsed = JSON.parse(p.serializedTickets);
+                        totalTicketsCount += parsed.length;
+                    } catch (e) {}
+                }
+            });
+
             if (badgeEl) badgeEl.textContent = `${allParticipants.length} Player${allParticipants.length === 1 ? '' : 's'}`;
+            if (ticketsBadgeEl) ticketsBadgeEl.textContent = `${totalTicketsCount} Ticket${totalTicketsCount === 1 ? '' : 's'}`;
 
             if (allParticipants.length === 0) {
                 listEl.innerHTML = `<p class="text-xs text-slate-500 italic">No players connected yet...</p>`;
@@ -725,7 +740,7 @@
 
             const calledSet = new Set(calledNumbers);
 
-            listEl.innerHTML = allParticipants.map(p => {
+            listEl.innerHTML = allParticipants.map((p, pIdx) => {
                 let parsedTickets = [];
                 if (p.serializedTickets) {
                     try {
@@ -735,7 +750,7 @@
                     }
                 }
 
-                const ticketsHtml = parsedTickets.map(tkt => {
+                const ticketsHtml = parsedTickets.map((tkt, tIdx) => {
                     let markedCount = 0;
                     const gridRows = tkt.grid || [];
                     const daubedRows = tkt.daubed || Array.from({ length: 3 }, () => Array(9).fill(false));
@@ -767,6 +782,8 @@
                         }).join('')
                     ).join('');
 
+                    const tktUniqueId = `roster-tkt-${pIdx}-${tIdx}`;
+
                     return `
                         <div class="bg-slate-900/80 border border-slate-700/80 rounded-xl p-3 space-y-2">
                             <div class="flex flex-wrap justify-between items-center gap-1 text-xs">
@@ -774,12 +791,19 @@
                                     <span class="font-bold text-white">Ticket: "${escapeHtml(tkt.name || 'Ticket')}"</span>
                                     <span class="ml-2 font-mono text-[10px] text-indigo-300 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">${escapeHtml(tkt.id || '')}</span>
                                 </div>
-                                <span class="px-2 py-0.5 rounded bg-slate-800 text-emerald-400 border border-slate-700 font-semibold">
-                                    ${markedCount} / 15 Called
-                                </span>
+                                <div class="flex items-center gap-2">
+                                    <span class="px-2 py-0.5 rounded bg-slate-800 text-emerald-400 border border-slate-700 font-semibold">
+                                        ${markedCount} / 15 Called
+                                    </span>
+                                    <button onclick="document.getElementById('${tktUniqueId}').classList.toggle('hidden')" class="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 text-[11px] font-semibold transition">
+                                        Toggle View
+                                    </button>
+                                </div>
                             </div>
-                            <div class="grid grid-cols-9 gap-1 max-w-sm">
-                                ${gridContent}
+                            <div id="${tktUniqueId}" class="hidden pt-2">
+                                <div class="grid grid-cols-9 gap-1 max-w-sm">
+                                    ${gridContent}
+                                </div>
                             </div>
                         </div>
                     `;
