@@ -634,9 +634,7 @@
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // =========================================================================
         // FIREBASE CONFIGURATION
-        // =========================================================================
         const MANUAL_FIREBASE_CONFIG = {
             apiKey: "AIzaSyCgQ27fdHpO13OQ9V5fNIwktY_1Ezm7UQc",
             authDomain: "online-housie-a4eb3.firebaseapp.com",
@@ -1457,6 +1455,11 @@
             participants.forEach(player => {
                 (player.tickets || []).forEach(tkt => {
                     if (!tkt || !tkt.grid) return;
+                    
+                    // If the ticket is restricted because it already won a prize, skip it
+                    const alreadyWonThisTicket = restrictOnePrizePerTicket && Object.values(claimsStatus).some(claim => claim && claim.ticketId === tkt.id);
+                    if (alreadyWonThisTicket) return;
+
                     const matchedPrizes = prizeOrder.filter(prize => !claimsStatus[prize] && verifyPatternOnTicket(tkt, prize));
                     if (matchedPrizes.length > 0) {
                         eligibleItems.push({
@@ -1490,250 +1493,230 @@
         }
 
         function copyInviteLink() {
-            const url = new URL(window.location.href);
-            url.searchParams.set('room', roomCode);
-            copyTextToClipboard(url.toString());
-            showModal('🔗', 'Invite Link Copied!', `Share this link with friends to join Room ${roomCode} directly.`);
+            const url = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
+            navigator.clipboard.writeText(url).then(() => {
+                showModal('🔗', 'Invite Link Copied!', 'Share this link with your friends so they can join your room.');
+            }).catch(() => {
+                const el = document.createElement('textarea');
+                el.value = url;
+                document.body.appendChild(el);
+                el.select();
+                document.execCommand('copy');
+                document.body.removeChild(el);
+                showModal('🔗', 'Invite Link Copied!', 'Share this link with your friends so they can join your room.');
+            });
         }
 
         function copyShareMessage() {
-            const url = new URL(window.location.href);
-            url.searchParams.set('room', roomCode);
-            const msg = `🎲 Join my live Tambola / Housie game!\nRoom Code: *${roomCode}*\nDirect Link: ${url.toString()}`;
-            copyTextToClipboard(msg);
-            showModal('💬', 'WhatsApp Invite Copied!', 'Paste the invite message in your WhatsApp group.');
-        }
-
-        function copyTextToClipboard(text) {
-            const textarea = document.createElement('textarea');
-            textarea.value = text;
-            textarea.style.position = 'fixed';
-            textarea.style.opacity = '0';
-            document.body.appendChild(textarea);
-            textarea.select();
-            try {
+            const url = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
+            const msg = `Join my live Tambola / Housie game! 🎲\nRoom Code: ${roomCode}\nClick here to join: ${url}`;
+            navigator.clipboard.writeText(msg).then(() => {
+                showModal('💬', 'WhatsApp Message Copied!', 'Paste this message into WhatsApp or any chat to invite players.');
+            }).catch(() => {
+                const el = document.createElement('textarea');
+                el.value = msg;
+                document.body.appendChild(el);
+                el.select();
                 document.execCommand('copy');
-            } catch (err) {
-                console.error('Copy failed:', err);
-            }
-            document.body.removeChild(textarea);
+                document.body.removeChild(el);
+                showModal('💬', 'WhatsApp Message Copied!', 'Paste this message into WhatsApp or any chat to invite players.');
+            });
         }
 
         function confirmResetRoomNumbers() {
+            if (!isHost) return;
             const modal = document.getElementById('custom-modal');
-            document.getElementById('modal-icon').textContent = '🔄';
+            document.getElementById('modal-icon').textContent = '⚠️';
             document.getElementById('modal-title').textContent = 'Reset Game Board?';
-            document.getElementById('modal-message').textContent = 'This will clear all called numbers and reset all prizes for everyone in the room.';
+            document.getElementById('modal-message').textContent = 'This will clear all called numbers and prize claims for the room. Are you sure?';
             document.getElementById('modal-actions').innerHTML = `
                 <button onclick="closeModal()" class="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded-xl text-sm">Cancel</button>
-                <button onclick="executeResetRoom()" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-xl text-sm">Reset Now</button>
+                <button onclick="closeModal(); resetRoomNumbers();" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-xl text-sm">Reset Board</button>
             `;
             modal.classList.remove('hidden');
         }
 
-        async function executeResetRoom() {
-            closeModal();
-            stopAutoPlay();
+        async function resetRoomNumbers() {
+            if (!isHost) return;
             calledNumbers = [];
             currentNumber = null;
-            const emptyClaims = {
+            claimsStatus = {
                 "Early 5": null,
                 "Top Line": null,
                 "Middle Line": null,
                 "Bottom Line": null,
                 "Full House": null
             };
-            claimsStatus = emptyClaims;
 
-            tickets.forEach(t => {
-                t.daubed = Array.from({ length: 3 }, () => Array(9).fill(false));
-            });
-            saveSessionState();
-
-            if (!isOfflinePractice && db && roomCode) {
+            if (!isOfflinePractice && db) {
                 try {
                     const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
                     await updateDoc(roomRef, {
                         calledNumbers: [],
                         currentNumber: null,
-                        claims: emptyClaims
+                        claims: claimsStatus
                     });
                 } catch (err) {
-                    console.error("Reset room error:", err);
+                    console.error("Error resetting room:", err);
                 }
             }
-
             updateAllRoomUI();
+            showModal('🔄', 'Board Reset', 'The game board has been successfully reset.');
         }
 
-        // =========================================================================
-        // MASTER BOARD, NUMBER CALLING & VOICE SYNTHESIS
-        // =========================================================================
-
-        function buildMasterBoard() {
-            const board = document.getElementById('master-board');
-            if (!board) return;
-            board.innerHTML = '';
-            for (let i = 1; i <= 90; i++) {
-                const cell = document.createElement('div');
-                cell.id = `board-num-${i}`;
-                cell.textContent = i;
-                cell.onclick = () => {
-                    if (isHost && !calledNumbers.includes(i)) {
-                        callSpecificNumber(i);
-                    }
-                };
-                cell.className = 'board-number aspect-square flex items-center justify-center rounded-lg text-xs sm:text-sm font-bold bg-slate-900 hover:bg-slate-700 cursor-pointer border border-slate-700 text-slate-400 select-none';
-                board.appendChild(cell);
-            }
+        function returnToLobbyConfirm() {
+            const modal = document.getElementById('custom-modal');
+            document.getElementById('modal-icon').textContent = '🚪';
+            document.getElementById('modal-title').textContent = isHost ? 'End Room for Everyone?' : 'Leave Room?';
+            document.getElementById('modal-message').textContent = isHost
+                ? 'As the host, leaving the room will kick out all connected players and clear room details.'
+                : 'Are you sure you want to leave this room?';
+            document.getElementById('modal-actions').innerHTML = `
+                <button onclick="closeModal()" class="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded-xl text-sm">Stay</button>
+                <button onclick="closeModal(); executeLeaveRoom();" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-xl text-sm">Leave</button>
+            `;
+            modal.classList.remove('hidden');
         }
 
-        function updateHostBoardUI() {
-            const currentEl = document.getElementById('current-number-display');
-            const nicknameEl = document.getElementById('number-nickname');
-            const remainingEl = document.getElementById('numbers-remaining');
-            const totalCalledEl = document.getElementById('total-called-count');
-            const recentStrip = document.getElementById('recent-numbers-strip');
+        async function executeLeaveRoom() {
+            if (unsubscribeRoom) unsubscribeRoom();
+            if (unsubscribePlayers) unsubscribePlayers();
 
-            if (!currentEl) return;
-
-            currentEl.textContent = currentNumber || '--';
-            nicknameEl.textContent = currentNumber
-                ? (tambolaNicknames[currentNumber] || `Number ${currentNumber}`)
-                : 'Press "Draw Next Number" to start!';
-
-            const calledCount = calledNumbers.length;
-            remainingEl.textContent = `${90 - calledCount} remaining`;
-            totalCalledEl.textContent = `Called: ${calledCount} / 90`;
-
-            const calledSet = new Set(calledNumbers);
-            for (let i = 1; i <= 90; i++) {
-                const cell = document.getElementById(`board-num-${i}`);
-                if (!cell) continue;
-                if (i === currentNumber) {
-                    cell.className = 'board-number aspect-square flex items-center justify-center rounded-lg text-xs sm:text-sm font-black bg-amber-500 text-slate-950 border-2 border-amber-300 shadow-lg scale-105 select-none';
-                } else if (calledSet.has(i)) {
-                    cell.className = 'board-number aspect-square flex items-center justify-center rounded-lg text-xs sm:text-sm font-bold bg-emerald-600 text-white border border-emerald-500 select-none';
-                } else {
-                    cell.className = 'board-number aspect-square flex items-center justify-center rounded-lg text-xs sm:text-sm font-bold bg-slate-900 hover:bg-slate-700 cursor-pointer border border-slate-700 text-slate-400 select-none';
+            if (isHost && !isOfflinePractice && db && roomCode) {
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                    await updateDoc(roomRef, { roomClosed: true });
+                } catch (e) {
+                    console.error("Error closing room on leave:", e);
                 }
             }
 
-            if (calledNumbers.length === 0) {
-                recentStrip.innerHTML = `<span class="text-xs text-slate-500 italic px-2">No numbers called yet...</span>`;
-            } else {
-                const recent = [...calledNumbers].reverse().slice(0, 12);
-                recentStrip.innerHTML = recent.map((num, idx) => `
-                    <div class="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm ${idx === 0 ? 'bg-amber-500 text-slate-950 ring-2 ring-amber-300' : 'bg-slate-900 text-emerald-300 border border-slate-700'}">
-                        ${num}
-                    </div>
-                `).join('');
+            if (!isHost && !isOfflinePractice && db && roomCode && currentUser) {
+                try {
+                    const playerRef = doc(db, 'artifacts', appId, 'public', 'data', `tambola_players_${roomCode}`, currentUser.uid);
+                    await setDoc(playerRef, { left: true });
+                } catch (e) {
+                    console.error("Error cleaning up player record:", e);
+                }
             }
 
-            document.getElementById('stat-last').textContent = currentNumber || '--';
-            document.getElementById('stat-progress').textContent = `${Math.round((calledCount / 90) * 100)}%`;
-            const oddCount = calledNumbers.filter(n => n % 2 !== 0).length;
-            const evenCount = calledCount - oddCount;
-            document.getElementById('stat-odd-even').textContent = calledCount > 0 ? `${oddCount} / ${evenCount}` : '--';
+            clearSessionState();
+            roomCode = null;
+            isHost = false;
+            calledNumbers = [];
+            currentNumber = null;
+            tickets = [];
+            roomRoster = [];
+
+            if (autoPlayInterval) {
+                clearInterval(autoPlayInterval);
+                autoPlayInterval = null;
+            }
+
+            document.getElementById('section-lobby').classList.remove('hidden');
+            ['host', 'player', 'players', 'claims'].forEach(t => document.getElementById(`section-${t}`).classList.add('hidden'));
+            document.getElementById('nav-tabs').classList.add('hidden');
+            document.getElementById('leave-room-btn').classList.add('hidden');
+            document.getElementById('room-status-pill').innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span><span>Lobby / Setup</span>`;
+
+            try {
+                if (window.history && window.history.replaceState && !window.location.protocol.startsWith('blob:')) {
+                    const cleanUrl = window.location.protocol + '//' + window.location.host + window.location.pathname;
+                    window.history.replaceState({}, document.title, cleanUrl);
+                }
+            } catch (e) {}
+
+            showModal('👋', 'Left Room', 'You have successfully left the game room.');
+        }
+
+        window.executeLeaveRoom = executeLeaveRoom;
+
+        function showModal(icon, title, message) {
+            const modal = document.getElementById('custom-modal');
+            document.getElementById('modal-icon').textContent = icon;
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-message').textContent = message;
+            document.getElementById('modal-actions').innerHTML = `
+                <button onclick="closeModal()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-sm transition">
+                    Got It
+                </button>
+            `;
+            modal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('custom-modal').classList.add('hidden');
+        }
+
+        // Voice Callout (SpeechSynthesis)
+        function toggleAudio() {
+            isAudioEnabled = !isAudioEnabled;
+            const btn = document.getElementById('audio-btn');
+            const icon = document.getElementById('audio-icon');
+            if (isAudioEnabled) {
+                icon.textContent = '🔊';
+                btn.classList.add('bg-emerald-600', 'text-white');
+                btn.classList.remove('bg-slate-700', 'text-slate-200');
+                speakNumber(currentNumber || 0, "Voice callout enabled");
+            } else {
+                icon.textContent = '🔇';
+                btn.classList.remove('bg-emerald-600', 'text-white');
+                btn.classList.add('bg-slate-700', 'text-slate-200');
+            }
+        }
+
+        function speakNumber(num, customText) {
+            if (!isAudioEnabled || !('speechSynthesis' in window)) return;
+            window.speechSynthesis.cancel();
+            let textToSpeak = customText || '';
+            if (!customText && num) {
+                const nick = tambolaNicknames[num] || '';
+                textToSpeak = `Number ${num}. ${nick}`;
+            }
+            if (!textToSpeak) return;
+            const utterance = new SpeechSynthesisUtterance(textToSpeak);
+            utterance.rate = 0.9;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function repeatCall() {
             if (currentNumber) {
-                const low = currentNumber === 90 ? 81 : Math.floor((currentNumber - 1) / 10) * 10 + 1;
-                const high = Math.min(90, low + 9);
-                document.getElementById('stat-decade').textContent = `${low}-${high}`;
+                speakNumber(currentNumber);
             } else {
-                document.getElementById('stat-decade').textContent = '--';
+                showModal('ℹ️', 'No Number', 'No number has been drawn yet.');
             }
         }
 
-        function renderConnectedPlayers(roster) {
-            const countEl = document.getElementById('player-roster-count');
-            const listEl = document.getElementById('connected-players-list');
-            if (!countEl || !listEl) return;
-
-            const allParticipants = getAllParticipantsList(roster);
-            countEl.textContent = allParticipants.length;
-            if (allParticipants.length === 0) {
-                listEl.innerHTML = `<span class="text-xs text-slate-500 italic">Waiting for players to join...</span>`;
-                return;
-            }
-
-            listEl.innerHTML = allParticipants.map(p => {
-                let parsedTickets = [];
-                if (p.serializedTickets) {
-                    try {
-                        parsedTickets = JSON.parse(p.serializedTickets);
-                    } catch (e) {
-                        parsedTickets = [];
-                    }
-                }
-                const ticketNamesList = parsedTickets.map(t => `"${escapeHtml(t.name || 'Ticket')}"`).join(', ');
-
-                return `
-                    <div class="bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 flex items-center justify-between">
-                        <div class="flex items-center gap-2">
-                            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-                            <span class="font-bold text-white text-xs sm:text-sm">${escapeHtml(p.name || 'Player')}</span>
-                            ${ticketNamesList ? `<span class="text-xs text-slate-400">(${ticketNamesList})</span>` : ''}
-                        </div>
-                        <span class="text-xs text-slate-300 bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-700">${parsedTickets.length} ticket${parsedTickets.length === 1 ? '' : 's'}</span>
-                    </div>
-                `;
-            }).join('');
-        }
-
+        // Host Number Drawing
         async function drawNumber() {
             if (!isHost) return;
             if (calledNumbers.length >= 90) {
-                stopAutoPlay();
-                showModal('🏁', 'All 90 Numbers Called!', 'Every number from 1 to 90 has been drawn.');
+                showModal('🏁', 'Game Over', 'All 90 numbers have been drawn!');
+                if (autoPlayInterval) {
+                    clearInterval(autoPlayInterval);
+                    autoPlayInterval = null;
+                    document.getElementById('autoplay-icon').textContent = '▶️';
+                    document.getElementById('autoplay-text').textContent = 'Auto';
+                }
                 return;
             }
 
-            const calledSet = new Set(calledNumbers);
             const remaining = [];
             for (let i = 1; i <= 90; i++) {
-                if (!calledSet.has(i)) remaining.push(i);
+                if (!calledNumbers.includes(i)) remaining.push(i);
             }
 
-            const nextNum = remaining[Math.floor(Math.random() * remaining.length)];
-            await callSpecificNumber(nextNum);
-        }
+            const randIdx = Math.floor(Math.random() * remaining.length);
+            const nextNum = remaining[randIdx];
 
-        function callManualNumber() {
-            if (!isHost) return;
-            const input = document.getElementById('manual-number-input');
-            if (!input) return;
-            const num = parseInt(input.value, 10);
-
-            if (isNaN(num) || num < 1 || num > 90) {
-                showModal('⚠️', 'Invalid Number', 'Please enter a valid number between 1 and 90.');
-                return;
-            }
-            if (calledNumbers.includes(num)) {
-                showModal('ℹ️', 'Already Called', `Number ${num} has already been called!`);
-                input.value = '';
-                return;
-            }
-
-            input.value = '';
-            callSpecificNumber(num);
-        }
-
-        async function callSpecificNumber(num) {
-            if (!isHost) return;
-            if (calledNumbers.includes(num)) return;
-
-            calledNumbers.push(num);
-            currentNumber = num;
-
-            speakNumber(num);
+            calledNumbers.push(nextNum);
+            currentNumber = nextNum;
 
             if (isAutoMarkEnabled) {
                 applyAutoMarkToAllTickets();
             }
 
-            updateAllRoomUI();
-
-            if (!isOfflinePractice && db && roomCode) {
+            if (!isOfflinePractice && db) {
                 try {
                     const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
                     await updateDoc(roomRef, {
@@ -1741,191 +1724,111 @@
                         currentNumber: currentNumber
                     });
                 } catch (err) {
-                    console.error("Error syncing drawn number:", err);
+                    console.error("Error updating drawn number:", err);
                 }
             }
+
+            speakNumber(currentNumber);
+            updateAllRoomUI();
+        }
+
+        async function callManualNumber() {
+            if (!isHost) return;
+            const input = document.getElementById('manual-number-input');
+            const val = parseInt(input.value, 10);
+            input.value = '';
+
+            if (isNaN(val) || val < 1 || val > 90) {
+                showModal('⚠️', 'Invalid Number', 'Please enter a valid number between 1 and 90.');
+                return;
+            }
+            if (calledNumbers.includes(val)) {
+                showModal('⚠️', 'Already Called', `Number ${val} has already been called.`);
+                return;
+            }
+
+            calledNumbers.push(val);
+            currentNumber = val;
+
+            if (isAutoMarkEnabled) {
+                applyAutoMarkToAllTickets();
+            }
+
+            if (!isOfflinePractice && db) {
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                    await updateDoc(roomRef, {
+                        calledNumbers: calledNumbers,
+                        currentNumber: currentNumber
+                    });
+                } catch (err) {
+                    console.error("Error calling manual number:", err);
+                }
+            }
+
+            speakNumber(currentNumber);
+            updateAllRoomUI();
         }
 
         function toggleAutoPlay() {
-            if (autoPlayInterval) {
-                stopAutoPlay();
-            } else {
-                const speed = parseInt(document.getElementById('autoplay-speed').value, 10) || 5000;
-                document.getElementById('autoplay-icon').textContent = '⏸️';
-                document.getElementById('autoplay-text').textContent = 'Pause';
-                drawNumber();
-                autoPlayInterval = setInterval(drawNumber, speed);
-            }
-        }
+            if (!isHost) return;
+            const btn = document.getElementById('autoplay-btn');
+            const icon = document.getElementById('autoplay-icon');
+            const txt = document.getElementById('autoplay-text');
 
-        function stopAutoPlay() {
             if (autoPlayInterval) {
                 clearInterval(autoPlayInterval);
                 autoPlayInterval = null;
+                icon.textContent = '▶️';
+                txt.textContent = 'Auto';
+                btn.classList.remove('bg-rose-600');
+                btn.classList.add('bg-slate-700');
+            } else {
+                const speed = parseInt(document.getElementById('autoplay-speed').value, 10) || 5000;
+                autoPlayInterval = setInterval(() => {
+                    if (calledNumbers.length >= 90) {
+                        clearInterval(autoPlayInterval);
+                        autoPlayInterval = null;
+                        icon.textContent = '▶️';
+                        txt.textContent = 'Auto';
+                        btn.classList.remove('bg-rose-600');
+                        btn.classList.add('bg-slate-700');
+                        return;
+                    }
+                    drawNumber();
+                }, speed);
+                icon.textContent = '⏸️';
+                txt.textContent = 'Stop';
+                btn.classList.remove('bg-slate-700');
+                btn.classList.add('bg-rose-600');
             }
-            const icon = document.getElementById('autoplay-icon');
-            const text = document.getElementById('autoplay-text');
-            if (icon) icon.textContent = '▶️';
-            if (text) text.textContent = 'Auto';
         }
 
         function updateAutoPlaySpeed() {
             if (autoPlayInterval) {
-                stopAutoPlay();
-                toggleAutoPlay();
+                clearInterval(autoPlayInterval);
+                const speed = parseInt(document.getElementById('autoplay-speed').value, 10) || 5000;
+                autoPlayInterval = setInterval(() => {
+                    if (calledNumbers.length >= 90) {
+                        clearInterval(autoPlayInterval);
+                        autoPlayInterval = null;
+                        document.getElementById('autoplay-icon').textContent = '▶️';
+                        document.getElementById('autoplay-text').textContent = 'Auto';
+                        return;
+                    }
+                    drawNumber();
+                }, speed);
             }
         }
 
-        function repeatCall() {
-            if (currentNumber) {
-                speakNumber(currentNumber);
-            }
-        }
-
-        function toggleAudio() {
-            isAudioEnabled = !isAudioEnabled;
-            document.getElementById('audio-icon').textContent = isAudioEnabled ? '🔊' : '🔇';
-        }
-
-        function speakNumber(num) {
-            if (!isAudioEnabled || !('speechSynthesis' in window)) return;
-            try {
-                window.speechSynthesis.cancel();
-                const nickname = tambolaNicknames[num] || '';
-                const text = nickname ? `${nickname}. Number ${num}` : `Number ${num}`;
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.rate = 0.95;
-                window.speechSynthesis.speak(utterance);
-            } catch (e) {
-                console.warn("Speech synthesis unavailable:", e);
-            }
-        }
-
-        // =========================================================================
-        // PLAYER TICKETS, AUTO-MARK & CALLED BOARD
-        // =========================================================================
-
-        function buildPlayerMiniBoard() {
-            const mini = document.getElementById('player-mini-board');
-            if (!mini) return;
-            mini.innerHTML = '';
-            for (let i = 1; i <= 90; i++) {
-                const cell = document.createElement('div');
-                cell.id = `player-mini-num-${i}`;
-                cell.textContent = i;
-                cell.className = 'aspect-square flex items-center justify-center rounded text-[10px] sm:text-xs font-bold bg-slate-900 border border-slate-700 text-slate-500';
-                mini.appendChild(cell);
-            }
-        }
-
-        function updatePlayerCalledStripUI() {
-            const curEl = document.getElementById('player-current-number');
-            const nickEl = document.getElementById('player-current-nickname');
-            const ratioEl = document.getElementById('player-called-ratio');
-            const lastFiveEl = document.getElementById('player-last-five');
-            const btnCountEl = document.getElementById('player-called-count-btn');
-
-            if (!curEl) return;
-
-            curEl.textContent = currentNumber || '--';
-            nickEl.textContent = currentNumber
-                ? (tambolaNicknames[currentNumber] || `Number ${currentNumber}`)
-                : 'Waiting for host to draw a number...';
-            ratioEl.textContent = `${calledNumbers.length}/90`;
-            btnCountEl.textContent = calledNumbers.length;
-
-            if (calledNumbers.length === 0) {
-                lastFiveEl.innerHTML = `<span class="text-xs text-slate-500 italic">None yet</span>`;
-            } else {
-                const last5 = [...calledNumbers].reverse().slice(0, 5);
-                lastFiveEl.innerHTML = last5.map((n, i) => `
-                    <span class="px-2 py-0.5 rounded-md text-xs font-bold ${i === 0 ? 'bg-amber-500 text-slate-950' : 'bg-slate-900 text-emerald-300 border border-slate-700'}">${n}</span>
-                `).join('');
-            }
-
-            const calledSet = new Set(calledNumbers);
-            for (let i = 1; i <= 90; i++) {
-                const cell = document.getElementById(`player-mini-num-${i}`);
-                if (!cell) continue;
-                if (i === currentNumber) {
-                    cell.className = 'aspect-square flex items-center justify-center rounded text-[10px] sm:text-xs font-black bg-amber-500 text-slate-950';
-                } else if (calledSet.has(i)) {
-                    cell.className = 'aspect-square flex items-center justify-center rounded text-[10px] sm:text-xs font-bold bg-emerald-600 text-white';
-                } else {
-                    cell.className = 'aspect-square flex items-center justify-center rounded text-[10px] sm:text-xs font-bold bg-slate-900 border border-slate-700 text-slate-500';
-                }
-            }
-        }
-
-        function togglePlayerCalledBoard() {
-            const drawer = document.getElementById('player-called-board-drawer');
-            if (drawer) drawer.classList.toggle('hidden');
-        }
-
+        // Toggle Auto-Mark vs Manual Daubing
         function toggleAutoMark() {
             isAutoMarkEnabled = !isAutoMarkEnabled;
-            const label = document.getElementById('automark-status-label');
-            const sub = document.getElementById('automark-sub-label');
-            const btn = document.getElementById('automark-toggle-btn');
-            const knob = document.getElementById('automark-toggle-knob');
-
-            if (label && btn && knob) {
-                label.textContent = isAutoMarkEnabled ? 'Auto-Mark ON' : 'Manual Mark';
-                if (sub) sub.textContent = isAutoMarkEnabled ? 'Auto-daubing called numbers' : 'Tap numbers to daub';
-                btn.setAttribute('aria-checked', isAutoMarkEnabled ? 'true' : 'false');
-                if (isAutoMarkEnabled) {
-                    btn.classList.remove('bg-slate-700');
-                    btn.classList.add('bg-emerald-600');
-                    knob.classList.remove('translate-x-0');
-                    knob.classList.add('translate-x-5');
-                } else {
-                    btn.classList.remove('bg-emerald-600');
-                    btn.classList.add('bg-slate-700');
-                    knob.classList.remove('translate-x-5');
-                    knob.classList.add('translate-x-0');
-                }
-            }
-
             if (isAutoMarkEnabled) {
                 applyAutoMarkToAllTickets();
             }
             saveSessionState();
             updateAllRoomUI();
-        }
-
-        function toggleHostRuleOnePrizePerTicket() {
-            if (!isHost) return;
-            restrictOnePrizePerTicket = !restrictOnePrizePerTicket;
-            updateHostRuleUI();
-
-            if (!isOfflinePractice && db && roomCode) {
-                try {
-                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
-                    updateDoc(roomRef, {
-                        restrictOnePrizePerTicket: restrictOnePrizePerTicket
-                    });
-                } catch (err) {
-                    console.error("Error updating rule setting:", err);
-                }
-            }
-        }
-
-        function updateHostRuleUI() {
-            const btn = document.getElementById('host-rule-one-prize-btn');
-            const knob = document.getElementById('host-rule-one-prize-knob');
-            if (!btn || !knob) return;
-            btn.setAttribute('aria-checked', restrictOnePrizePerTicket ? 'true' : 'false');
-            if (restrictOnePrizePerTicket) {
-                btn.classList.remove('bg-slate-700');
-                btn.classList.add('bg-emerald-600');
-                knob.classList.remove('translate-x-0');
-                knob.classList.add('translate-x-5');
-            } else {
-                btn.classList.remove('bg-emerald-600');
-                btn.classList.add('bg-slate-700');
-                knob.classList.remove('translate-x-5');
-                knob.classList.add('translate-x-0');
-            }
         }
 
         function applyAutoMarkToAllTickets() {
@@ -1940,34 +1843,244 @@
                     }
                 }
             });
-            saveSessionState();
         }
 
-        function toggleTicketCell(ticketId, row, col) {
-            if (isAutoMarkEnabled) {
-                return;
+        async function syncPlayerMetadata() {
+            if (isOfflinePractice || !db || !roomCode) return;
+            try {
+                const user = await ensureAuth();
+                if (!user) return;
+                const playerRef = doc(db, 'artifacts', appId, 'public', 'data', `tambola_players_${roomCode}`, user.uid);
+                await setDoc(playerRef, {
+                    uid: user.uid,
+                    name: playerName,
+                    ticketCount: tickets.length,
+                    ticketNames: tickets.map(t => t.name),
+                    serializedTickets: JSON.stringify(tickets.map(t => ({ id: t.id, name: t.name, grid: t.grid, daubed: t.daubed }))),
+                    joinedAt: Date.now()
+                }, { merge: true });
+            } catch (e) {
+                console.error("Failed to sync player metadata:", e);
             }
-            const tkt = tickets.find(t => t.id === ticketId);
-            if (!tkt) return;
-            const val = tkt.grid[row][col];
-            if (val === 0) return;
+        }
 
+        // Master Board Rendering (1 to 90)
+        function buildMasterBoard() {
+            const boardEl = document.getElementById('master-board');
+            if (!boardEl) return;
+            let html = '';
+            for (let i = 1; i <= 90; i++) {
+                html += `
+                    <div id="master-cell-${i}" onclick="callNumberFromBoard(${i})" class="board-number aspect-square rounded-lg bg-slate-900 border border-slate-700/80 flex items-center justify-center font-bold text-xs sm:text-sm text-slate-400 cursor-pointer hover:border-emerald-500 hover:text-white select-none">
+                        ${i}
+                    </div>
+                `;
+            }
+            boardEl.innerHTML = html;
+        }
+
+        function updateHostBoardUI() {
+            const currentEl = document.getElementById('current-number-display');
+            const nickEl = document.getElementById('number-nickname');
+            const remEl = document.getElementById('numbers-remaining');
+            const totalCalledEl = document.getElementById('total-called-count');
+            const recentStrip = document.getElementById('recent-numbers-strip');
+
+            if (currentEl) {
+                currentEl.textContent = currentNumber !== null ? currentNumber : '--';
+            }
+            if (nickEl) {
+                nickEl.textContent = currentNumber !== null ? (tambolaNicknames[currentNumber] || '') : 'Press "Draw Next Number" to start!';
+            }
+            const remCount = 90 - calledNumbers.length;
+            if (remEl) remEl.textContent = `${remCount} remaining`;
+            if (totalCalledEl) totalCalledEl.textContent = `Called: ${calledNumbers.length} / 90`;
+
+            // Update Master Board grid cells
             const calledSet = new Set(calledNumbers);
-            if (!calledSet.has(val)) {
-                return;
+            for (let i = 1; i <= 90; i++) {
+                const cell = document.getElementById(`master-cell-${i}`);
+                if (!cell) continue;
+                if (calledSet.has(i)) {
+                    if (i === currentNumber) {
+                        cell.className = "board-number aspect-square rounded-lg bg-gradient-to-tr from-amber-500 to-orange-600 text-white border-2 border-white flex items-center justify-center font-black text-xs sm:text-sm shadow-lg animate-pulse select-none cursor-pointer";
+                    } else {
+                        cell.className = "board-number aspect-square rounded-lg bg-emerald-600 text-white border border-emerald-400 flex items-center justify-center font-bold text-xs sm:text-sm select-none cursor-pointer";
+                    }
+                } else {
+                    cell.className = "board-number aspect-square rounded-lg bg-slate-900 border border-slate-700/80 flex items-center justify-center font-bold text-xs sm:text-sm text-slate-400 cursor-pointer hover:border-emerald-500 hover:text-white select-none";
+                }
             }
 
-            tkt.daubed[row][col] = !tkt.daubed[row][col];
-            saveSessionState();
+            // Recent strip
+            if (recentStrip) {
+                if (calledNumbers.length === 0) {
+                    recentStrip.innerHTML = `<span class="text-xs text-slate-500 italic px-2">No numbers called yet...</span>`;
+                } else {
+                    const last10 = [...calledNumbers].reverse().slice(0, 10);
+                    recentStrip.innerHTML = last10.map((num, idx) => `
+                        <div class="flex-shrink-0 w-11 h-11 rounded-xl ${idx === 0 ? 'bg-amber-500 text-slate-950 font-black ring-2 ring-white/50' : 'bg-slate-900 text-emerald-400 border border-slate-700 font-bold'} flex items-center justify-center text-sm shadow">
+                            ${num}
+                        </div>
+                    `).join('');
+                }
+            }
+
+            // Quick Stats
+            const statLast = document.getElementById('stat-last');
+            const statProgress = document.getElementById('stat-progress');
+            const statOddEven = document.getElementById('stat-odd-even');
+            const statDecade = document.getElementById('stat-decade');
+
+            if (statLast) statLast.textContent = currentNumber !== null ? currentNumber : '--';
+            if (statProgress) statProgress.textContent = `${Math.round((calledNumbers.length / 90) * 100)}%`;
+            if (statOddEven && currentNumber !== null) {
+                statOddEven.textContent = currentNumber % 2 === 0 ? 'Even' : 'Odd';
+            } else if (statOddEven) {
+                statOddEven.textContent = '--';
+            }
+            if (statDecade && currentNumber !== null) {
+                const dec = currentNumber === 90 ? '81-90' : `${Math.floor((currentNumber - 1) / 10) * 10 + 1}-${Math.floor((currentNumber - 1) / 10) * 10 + 10}`;
+                statDecade.textContent = dec;
+            } else if (statDecade) {
+                statDecade.textContent = '--';
+            }
+        }
+
+        async function callNumberFromBoard(num) {
+            if (!isHost) return;
+            if (calledNumbers.includes(num)) return;
+            calledNumbers.push(num);
+            currentNumber = num;
+
+            if (isAutoMarkEnabled) {
+                applyAutoMarkToAllTickets();
+            }
+
+            if (!isOfflinePractice && db) {
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                    await updateDoc(roomRef, {
+                        calledNumbers: calledNumbers,
+                        currentNumber: currentNumber
+                    });
+                } catch (e) {
+                    console.error("Error calling from board:", e);
+                }
+            }
+            speakNumber(currentNumber);
             updateAllRoomUI();
         }
 
-        function clearAllDaubs() {
-            tickets.forEach(tkt => {
-                tkt.daubed = Array.from({ length: 3 }, () => Array(9).fill(false));
-            });
-            saveSessionState();
-            updateAllRoomUI();
+        function renderConnectedPlayers(roster) {
+            const listEl = document.getElementById('connected-players-list');
+            const countEl = document.getElementById('player-roster-count');
+            if (!listEl) return;
+
+            const allParticipants = getAllParticipantsList(roster);
+            if (countEl) countEl.textContent = allParticipants.length;
+
+            if (allParticipants.length === 0) {
+                listEl.innerHTML = `<span class="text-xs text-slate-500 italic">Waiting for players to join...</span>`;
+                return;
+            }
+
+            listEl.innerHTML = allParticipants.map(p => {
+                let ticketCount = p.ticketCount || 1;
+                let ticketNames = p.ticketNames || [];
+                if (p.serializedTickets) {
+                    try {
+                        const parsed = JSON.parse(p.serializedTickets);
+                        ticketCount = parsed.length;
+                        ticketNames = parsed.map(t => t.name);
+                    } catch (e) {}
+                }
+                const ticketNamesStr = ticketNames.length > 0 ? `• "${ticketNames.join('", "')}"` : '';
+
+                return `
+                    <div class="bg-slate-900/80 border border-slate-700/60 rounded-xl px-3 py-2 flex items-center justify-between gap-2 text-xs">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                            <span class="font-bold text-white">${escapeHtml(p.name || 'Player')}</span>
+                            <span class="text-slate-400 truncate max-w-[200px]">${escapeHtml(ticketNamesStr)}</span>
+                        </div>
+                        <span class="px-2 py-0.5 rounded bg-slate-800 text-indigo-300 font-semibold border border-slate-700">${ticketCount} ticket${ticketCount === 1 ? '' : 's'}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Player Ticket UI & Interactions
+        function updatePlayerCalledStripUI() {
+            const currEl = document.getElementById('player-current-number');
+            const ratioEl = document.getElementById('player-called-ratio');
+            const nickEl = document.getElementById('player-current-nickname');
+            const lastFiveEl = document.getElementById('player-last-five');
+            const calledCountBtn = document.getElementById('player-called-count-btn');
+            const autoMarkStatus = document.getElementById('automark-status-label');
+            const autoMarkSub = document.getElementById('automark-sub-label');
+            const autoMarkBtn = document.getElementById('automark-toggle-btn');
+            const autoMarkKnob = document.getElementById('automark-toggle-knob');
+
+            if (currEl) currEl.textContent = currentNumber !== null ? currentNumber : '--';
+            if (ratioEl) ratioEl.textContent = `${calledNumbers.length}/90`;
+            if (calledCountBtn) calledCountBtn.textContent = calledNumbers.length;
+            if (nickEl) nickEl.textContent = currentNumber !== null ? (tambolaNicknames[currentNumber] || '') : 'Waiting for host to draw a number...';
+
+            if (autoMarkStatus && autoMarkSub && autoMarkBtn && autoMarkKnob) {
+                autoMarkStatus.textContent = isAutoMarkEnabled ? 'Auto-Mark ON' : 'Manual Mark';
+                autoMarkSub.textContent = isAutoMarkEnabled ? 'Auto-daubing called numbers' : 'Tap numbers on ticket to daub';
+                autoMarkBtn.setAttribute('aria-checked', isAutoMarkEnabled ? 'true' : 'false');
+                if (isAutoMarkEnabled) {
+                    autoMarkBtn.classList.remove('bg-slate-700');
+                    autoMarkBtn.classList.add('bg-emerald-600');
+                    autoMarkKnob.classList.remove('translate-x-0');
+                    autoMarkKnob.classList.add('translate-x-5');
+                } else {
+                    autoMarkBtn.classList.remove('bg-emerald-600');
+                    autoMarkBtn.classList.add('bg-slate-700');
+                    autoMarkKnob.classList.remove('translate-x-5');
+                    autoMarkKnob.classList.add('translate-x-0');
+                }
+            }
+
+            if (lastFiveEl) {
+                if (calledNumbers.length === 0) {
+                    lastFiveEl.innerHTML = `<span class="text-xs text-slate-500 italic">None yet</span>`;
+                } else {
+                    const last5 = [...calledNumbers].reverse().slice(0, 5);
+                    lastFiveEl.innerHTML = last5.map(n => `
+                        <span class="w-6 h-6 rounded-lg bg-slate-900 border border-slate-700 text-emerald-400 font-bold text-xs flex items-center justify-center">${n}</span>
+                    `).join('');
+                }
+            }
+
+            // Update Mini Player Board (1-90)
+            const calledSet = new Set(calledNumbers);
+            for (let i = 1; i <= 90; i++) {
+                const cell = document.getElementById(`player-mini-cell-${i}`);
+                if (!cell) continue;
+                if (calledSet.has(i)) {
+                    cell.className = "aspect-square rounded text-[9px] font-bold bg-emerald-600 text-white flex items-center justify-center";
+                } else {
+                    cell.className = "aspect-square rounded text-[9px] font-medium bg-slate-900 text-slate-500 border border-slate-800 flex items-center justify-center";
+                }
+            }
+        }
+
+        function buildPlayerMiniBoard() {
+            const board = document.getElementById('player-mini-board');
+            if (!board) return;
+            let html = '';
+            for (let i = 1; i <= 90; i++) {
+                html += `<div id="player-mini-cell-${i}" class="aspect-square rounded text-[9px] font-medium bg-slate-900 text-slate-500 border border-slate-800 flex items-center justify-center">${i}</div>`;
+            }
+            board.innerHTML = html;
+        }
+
+        function togglePlayerCalledBoard() {
+            const drawer = document.getElementById('player-called-board-drawer');
+            if (drawer) drawer.classList.toggle('hidden');
         }
 
         function renderPlayerTickets() {
@@ -1975,164 +2088,169 @@
             if (!container) return;
 
             if (tickets.length === 0) {
-                container.innerHTML = `<div class="col-span-full bg-slate-800 border border-slate-700 rounded-2xl p-8 text-center text-slate-400">No tickets generated.</div>`;
+                container.innerHTML = `<p class="text-xs text-slate-500 italic">No tickets generated.</p>`;
                 return;
             }
 
             const calledSet = new Set(calledNumbers);
-            const prizeOrder = ["Early 5", "Top Line", "Middle Line", "Bottom Line", "Full House"];
 
-            container.innerHTML = tickets.map((tkt, tIdx) => {
+            container.innerHTML = tickets.map((ticket, tIdx) => {
                 let markedCount = 0;
-                const gridHtml = tkt.grid.map((rowArr, rIdx) => {
-                    return rowArr.map((val, cIdx) => {
+                for (let r = 0; r < 3; r++) {
+                    for (let c = 0; c < 9; c++) {
+                        const val = ticket.grid[r][c];
+                        if (val > 0 && (ticket.daubed[r][c] || calledSet.has(val))) {
+                            markedCount++;
+                        }
+                    }
+                }
+
+                const gridHtml = ticket.grid.map((rowArr, rIdx) =>
+                    rowArr.map((val, cIdx) => {
                         if (val === 0) {
-                            return `<div class="aspect-square rounded-xl bg-slate-900/40 border border-slate-800/80"></div>`;
+                            return `<div class="aspect-square rounded-lg bg-slate-900/40 border border-slate-800/80"></div>`;
                         }
                         const isCalled = calledSet.has(val);
-                        const isDaubed = tkt.daubed[rIdx][cIdx] || (isAutoMarkEnabled && isCalled);
-                        if (isDaubed) markedCount++;
+                        const isDaubed = ticket.daubed[rIdx][cIdx] || (isCalled && isAutoMarkEnabled);
 
-                        let cellClass = 'bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500 cursor-pointer';
+                        let badgeClass = "bg-slate-900 text-slate-200 border-slate-700 hover:border-emerald-500 cursor-pointer";
                         if (isDaubed) {
-                            cellClass = 'bg-emerald-600 text-white font-black border-emerald-400 shadow-md scale-95';
+                            badgeClass = "bg-gradient-to-tr from-emerald-600 to-teal-500 text-white border-emerald-400 font-black shadow-md scale-95";
                         } else if (isCalled) {
-                            cellClass = 'bg-amber-500/20 text-amber-300 border-amber-500/60 animate-pulse';
+                            badgeClass = "bg-slate-800 text-amber-300 border-amber-500/60 ring-2 ring-amber-500/30 cursor-pointer animate-pulse";
                         }
 
                         return `
-                            <div onclick="toggleTicketCell('${tkt.id}', ${rIdx}, ${cIdx})" class="ticket-cell aspect-square rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center border transition select-none ${cellClass}">
+                            <div onclick="toggleCellDaub(${tIdx}, ${rIdx}, ${cIdx})" class="ticket-cell aspect-square rounded-xl font-bold text-xs sm:text-base flex items-center justify-center border transition select-none ${badgeClass}">
                                 ${val}
                             </div>
                         `;
-                    }).join('');
-                }).join('');
-
-                // Check which prizes are eligible for this specific ticket
-                const eligiblePrizes = prizeOrder.filter(prize => !claimsStatus[prize] && verifyPatternOnTicket(tkt, prize));
-                const alreadyWonThisTicket = restrictOnePrizePerTicket && Object.values(claimsStatus).some(claim => claim && claim.ticketId === tkt.id);
-
-                const claimButtonsHtml = eligiblePrizes.length > 0 && !alreadyWonThisTicket ? `
-                    <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-700/80">
-                        <span class="text-xs font-bold text-amber-300">Eligible to Claim:</span>
-                        ${eligiblePrizes.map(p => `
-                            <button onclick="claimPrizeForTicket('${tkt.id}', '${p}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow transition animate-bounce">
-                                Claim ${p} 🎉
-                            </button>
-                        `).join('')}
-                    </div>
-                ` : (alreadyWonThisTicket ? `<div class="text-[11px] text-slate-400 italic pt-1">Ticket restricted from claiming further prizes.</div>` : '');
+                    }).join('')
+                ).join('');
 
                 return `
-                    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-xl space-y-4">
-                        <div class="flex flex-wrap justify-between items-center gap-2">
+                    <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+                        <div class="flex justify-between items-center">
                             <div class="flex items-center gap-2">
-                                <span class="px-2.5 py-1 rounded-lg bg-indigo-900/60 text-indigo-300 border border-indigo-500/30 text-xs font-bold">Ticket ${tIdx + 1}</span>
-                                <input type="text" value="${escapeHtml(tkt.name)}" onchange="updateTicketName('${tkt.id}', this.value)" class="bg-slate-900 border border-slate-700 text-white text-xs sm:text-sm font-semibold rounded-lg px-2.5 py-1 focus:outline-none focus:border-emerald-500 max-w-[160px]">
+                                <input type="text" value="${escapeHtml(ticket.name)}" onchange="updateTicketName(${tIdx}, this.value)" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-sm font-bold text-white focus:outline-none focus:border-emerald-500 max-w-[160px]">
+                                <span class="text-[11px] font-mono text-indigo-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-700">${ticket.id}</span>
                             </div>
                             <div class="flex items-center gap-2">
-                                <span class="font-mono text-xs text-slate-400">${escapeHtml(tkt.id)}</span>
-                                <span class="px-2.5 py-1 rounded-lg bg-slate-900 text-emerald-400 border border-slate-700 text-xs font-bold">${markedCount} / 15 Called</span>
+                                <span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-900 text-emerald-400 border border-slate-700">
+                                    ${markedCount} / 15 Called
+                                </span>
                             </div>
                         </div>
-                        <div class="grid grid-cols-9 gap-1.5 sm:gap-2 bg-slate-950/60 p-3 rounded-xl border border-slate-700/80">
+
+                        <div class="grid grid-cols-9 gap-1.5 sm:gap-2 bg-slate-950/60 p-3 rounded-2xl border border-slate-800">
                             ${gridHtml}
                         </div>
-                        ${claimButtonsHtml}
                     </div>
                 `;
             }).join('');
         }
 
-        function updateTicketName(ticketId, newName) {
-            const tkt = tickets.find(t => t.id === ticketId);
-            if (tkt) {
-                tkt.name = newName.trim() || `Ticket`;
+        function updateTicketName(idx, newName) {
+            if (tickets[idx]) {
+                tickets[idx].name = newName.trim() || `Ticket ${idx + 1}`;
                 saveSessionState();
                 syncPlayerMetadata();
                 populateClaimTicketSelector();
+                if (isHost) updateAllRoomUI();
             }
         }
 
-        function syncPlayerMetadata() {
-            if (isOfflinePractice || !db || !roomCode) return;
-            ensureAuth().then(user => {
-                if (!user) return;
-                const playerRef = doc(db, 'artifacts', appId, 'public', 'data', `tambola_players_${roomCode}`, user.uid);
-                setDoc(playerRef, {
-                    uid: user.uid,
-                    name: playerName,
-                    ticketCount: tickets.length,
-                    ticketNames: tickets.map(t => t.name),
-                    serializedTickets: JSON.stringify(tickets.map(t => ({ id: t.id, name: t.name, grid: t.grid, daubed: t.daubed }))),
-                    updatedAt: Date.now()
-                }, { merge: true }).catch(err => console.error("Sync player meta error:", err));
-            });
+        function toggleCellDaub(tIdx, rIdx, cIdx) {
+            if (isAutoMarkEnabled) {
+                return;
+            }
+            const ticket = tickets[tIdx];
+            if (!ticket) return;
+            const val = ticket.grid[rIdx][cIdx];
+            if (val === 0) return;
+
+            ticket.daubed[rIdx][cIdx] = !ticket.daubed[rIdx][cIdx];
+            saveSessionState();
+            syncPlayerMetadata();
+            renderPlayerTickets();
+            if (isHost) {
+                renderHostTickets();
+                updateHostPrizeAndEligibilityMonitor();
+            }
         }
 
-        // =========================================================================
-        // PRIZES & CLAIMS ENGINE
-        // =========================================================================
+        function clearAllDaubs() {
+            tickets.forEach(tkt => {
+                tkt.daubed = Array.from({ length: 3 }, () => Array(9).fill(false));
+            });
+            saveSessionState();
+            syncPlayerMetadata();
+            renderPlayerTickets();
+            if (isHost) {
+                renderHostTickets();
+                updateHostPrizeAndEligibilityMonitor();
+            }
+        }
 
+        // Winning Claims Logic
         function populateClaimTicketSelector() {
             const sel = document.getElementById('claim-ticket-selector');
             if (!sel) return;
-            sel.innerHTML = tickets.map((tkt, idx) => `
-                <option value="${tkt.id}">"${escapeHtml(tkt.name)}" (Ticket ${idx + 1})</option>
+            if (tickets.length === 0) {
+                sel.innerHTML = `<option value="">No tickets available</option>`;
+                return;
+            }
+            sel.innerHTML = tickets.map((t, idx) => `
+                <option value="${idx}">${escapeHtml(t.name)} (${t.id})</option>
             `).join('');
         }
 
-        function verifyPatternOnTicket(tkt, prize) {
-            const grid = tkt.grid;
-            const daubed = tkt.daubed;
+        function verifyPatternOnTicket(ticket, prizeName) {
             const calledSet = new Set(calledNumbers);
+            const grid = ticket.grid;
+            const daubed = ticket.daubed;
 
-            const isCellMarked = (r, c) => {
+            const isMarked = (r, c) => {
                 const val = grid[r][c];
-                return val > 0 && (daubed[r][c] || calledSet.has(val));
+                if (val === 0) return false;
+                return daubed[r][c] || calledSet.has(val);
             };
 
-            if (prize === "Early 5") {
-                let totalMarked = 0;
+            if (prizeName === "Early 5") {
+                let count = 0;
                 for (let r = 0; r < 3; r++) {
                     for (let c = 0; c < 9; c++) {
-                        if (isCellMarked(r, c)) totalMarked++;
+                        if (isMarked(r, c)) count++;
                     }
                 }
-                return totalMarked >= 5;
+                return count >= 5;
             }
 
-            if (prize === "Top Line") {
+            if (prizeName === "Top Line") {
                 for (let c = 0; c < 9; c++) {
-                    if (grid[0][c] > 0 && !isCellMarked(0, c)) return false;
+                    if (grid[0][c] > 0 && !isMarked(0, c)) return false;
                 }
-                let rowCount = 0;
-                for (let c = 0; c < 9; c++) if (grid[0][c] > 0) rowCount++;
-                return rowCount === 5;
+                return true;
             }
 
-            if (prize === "Middle Line") {
+            if (prizeName === "Middle Line") {
                 for (let c = 0; c < 9; c++) {
-                    if (grid[1][c] > 0 && !isCellMarked(1, c)) return false;
+                    if (grid[1][c] > 0 && !isMarked(1, c)) return false;
                 }
-                let rowCount = 0;
-                for (let c = 0; c < 9; c++) if (grid[1][c] > 0) rowCount++;
-                return rowCount === 5;
+                return true;
             }
 
-            if (prize === "Bottom Line") {
+            if (prizeName === "Bottom Line") {
                 for (let c = 0; c < 9; c++) {
-                    if (grid[2][c] > 0 && !isCellMarked(2, c)) return false;
+                    if (grid[2][c] > 0 && !isMarked(2, c)) return false;
                 }
-                let rowCount = 0;
-                for (let c = 0; c < 9; c++) if (grid[2][c] > 0) rowCount++;
-                return rowCount === 5;
+                return true;
             }
 
-            if (prize === "Full House") {
+            if (prizeName === "Full House") {
                 for (let r = 0; r < 3; r++) {
                     for (let c = 0; c < 9; c++) {
-                        if (grid[r][c] > 0 && !isCellMarked(r, c)) return false;
+                        if (grid[r][c] > 0 && !isMarked(r, c)) return false;
                     }
                 }
                 return true;
@@ -2142,217 +2260,147 @@
         }
 
         async function claimPrize(prizeName) {
-            const sel = document.getElementById('claim-ticket-selector');
-            const ticketId = sel ? sel.value : (tickets[0] ? tickets[0].id : null);
-            await claimPrizeForTicket(ticketId, prizeName);
-        }
-
-        async function claimPrizeForTicket(ticketId, prizeName) {
             if (claimsStatus[prizeName]) {
-                showModal('ℹ️', 'Prize Already Claimed', `${prizeName} has already been claimed by ${claimsStatus[prizeName].winnerName}!`);
+                showModal('ℹ️', 'Already Claimed', `${prizeName} has already been claimed by ${claimsStatus[prizeName].winnerName}!`);
                 return;
             }
 
-            const tkt = tickets.find(t => t.id === ticketId);
-            if (!tkt) {
-                showModal('⚠️', 'Select Ticket', 'Please select a valid ticket from your list.');
+            const sel = document.getElementById('claim-ticket-selector');
+            if (!sel || sel.value === "") {
+                showModal('⚠️', 'Select Ticket', 'Please select one of your playing tickets to claim the prize.');
                 return;
             }
 
-            if (restrictOnePrizePerTicket) {
-                const alreadyWon = Object.values(claimsStatus).some(claim => claim && claim.ticketId === tkt.id);
-                if (alreadyWon) {
-                    showModal('❌', 'Ticket Restricted', `This ticket ("${tkt.name}") has already won a prize and is restricted from claiming another under current room rules.`);
-                    return;
-                }
+            const tIdx = parseInt(sel.value, 10);
+            const ticket = tickets[tIdx];
+            if (!ticket) {
+                showModal('⚠️', 'Invalid Ticket', 'Selected ticket not found.');
+                return;
             }
 
-            const isValid = verifyPatternOnTicket(tkt, prizeName);
+            if (restrictOnePrizePerTicket && Object.values(claimsStatus).some(claim => claim && claim.ticketId === ticket.id)) {
+                showModal('⚠️', 'Ticket Restricted', `This ticket has already won a prize and cannot claim another one under the room rules.`);
+                return;
+            }
+
+            const isValid = verifyPatternOnTicket(ticket, prizeName);
             if (!isValid) {
-                showModal('❌', 'Invalid Claim', `Your ticket "${tkt.name}" does not meet the requirements for ${prizeName} yet.`);
+                showModal('❌', 'Claim Rejected', `Your ticket "${ticket.name}" does not yet satisfy the required pattern for ${prizeName}. Check marked numbers.`);
                 return;
             }
 
             claimsStatus[prizeName] = {
                 winnerName: playerName,
-                ticketName: tkt.name,
-                ticketId: tkt.id,
+                ticketName: ticket.name,
+                ticketId: ticket.id,
                 claimedAt: Date.now()
             };
 
-            updateAllRoomUI();
-            showModal('🏆', 'Congratulations!', `Successfully verified and claimed ${prizeName} with "${tkt.name}"!`);
-
-            if (!isOfflinePractice && db && roomCode) {
+            if (!isOfflinePractice && db) {
                 try {
                     const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
                     await updateDoc(roomRef, {
                         claims: claimsStatus
                     });
                 } catch (err) {
-                    console.error("Error updating claims:", err);
+                    console.error("Error submitting claim:", err);
                 }
             }
+
+            updateClaimsUI();
+            updateHostPrizeAndEligibilityMonitor();
+            showModal('🏆', 'Prize Claimed Successfully!', `Congratulations! Your claim for ${prizeName} with ticket "${ticket.name}" has been verified!`);
         }
 
         function updateClaimsUI() {
             const prizeOrder = ["Early 5", "Top Line", "Middle Line", "Bottom Line", "Full House"];
             const logEl = document.getElementById('claim-log');
-            if (!logEl) return;
 
-            let claimedCount = 0;
-            const logs = prizeOrder.map(prize => {
-                const claim = claimsStatus[prize];
-                const btn = document.getElementById(`claim-${prize.toLowerCase().replace(/\s+/g, '-')}`);
-                if (claim) {
-                    claimedCount++;
-                    if (btn) {
-                        btn.disabled = true;
-                        btn.className = 'w-full py-2.5 bg-emerald-900/60 text-emerald-300 border border-emerald-500/40 font-semibold rounded-lg text-sm cursor-not-allowed';
-                        btn.textContent = `Claimed by ${claim.winnerName} 🎉`;
-                    }
-                    return `
-                        <div class="bg-slate-900 border border-slate-700 rounded-xl p-3 flex justify-between items-center">
-                            <div>
-                                <span class="font-bold text-white">${escapeHtml(prize)}:</span>
-                                <span class="text-emerald-400 font-semibold ml-1">${escapeHtml(claim.winnerName)}</span>
-                                <span class="text-xs text-slate-400 ml-1">("${escapeHtml(claim.ticketName)}")</span>
-                            </div>
-                            <span class="px-2 py-0.5 rounded bg-emerald-900/80 text-emerald-300 text-xs font-bold border border-emerald-500/40">Verified</span>
-                        </div>
-                    `;
-                } else {
-                    if (btn) {
-                        btn.disabled = false;
-                        btn.className = 'w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg text-sm transition shadow';
-                        btn.textContent = `Claim ${prize} 🎉`;
-                    }
-                    return null;
-                }
-            }).filter(Boolean);
-
-            if (claimedCount === 0) {
-                logEl.innerHTML = `<p class="italic text-slate-500">No claims verified yet. Be the first to win!</p>`;
+            const verifiedClaims = prizeOrder.filter(p => claimsStatus[p] !== null);
+            if (verifiedClaims.length === 0) {
+                if (logEl) logEl.innerHTML = `<p class="italic text-slate-500">No claims verified yet. Be the first to win!</p>`;
             } else {
-                logEl.innerHTML = logs.join('');
-            }
-        }
-
-        // Modal Utilities
-        function showModal(icon, title, message) {
-            document.getElementById('modal-icon').textContent = icon;
-            document.getElementById('modal-title').textContent = title;
-            document.getElementById('modal-message').textContent = message;
-            document.getElementById('modal-actions').innerHTML = `
-                <button onclick="closeModal()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-sm transition">
-                    Got It
-                </button>
-            `;
-            document.getElementById('custom-modal').classList.remove('hidden');
-        }
-
-        function closeModal() {
-            document.getElementById('custom-modal').classList.add('hidden');
-        }
-
-        function returnToLobbyConfirm() {
-            const modal = document.getElementById('custom-modal');
-            document.getElementById('modal-icon').textContent = '🚪';
-            document.getElementById('modal-title').textContent = isHost ? 'End Game & Kick All Players?' : 'Leave Room?';
-            document.getElementById('modal-message').textContent = isHost 
-                ? 'As the host, leaving will end the game and kick all connected players back to the lobby.' 
-                : 'Are you sure you want to leave the current game room?';
-            document.getElementById('modal-actions').innerHTML = `
-                <button onclick="closeModal()" class="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded-xl text-sm">Cancel</button>
-                <button onclick="closeModal(); executeLeaveRoom();" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-xl text-sm">${isHost ? 'End & Kick All' : 'Leave'}</button>
-            `;
-            modal.classList.remove('hidden');
-        }
-
-        async function executeLeaveRoom() {
-            stopAutoPlay();
-            if (isHost && !isOfflinePractice && db && roomCode) {
-                try {
-                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
-                    await updateDoc(roomRef, {
-                        roomClosed: true,
-                        closedAt: Date.now()
-                    });
-                } catch (err) {
-                    console.error("Error closing room on host leave:", err);
+                if (logEl) {
+                    logEl.innerHTML = prizeOrder.map(p => {
+                        const win = claimsStatus[p];
+                        if (!win) return '';
+                        return `
+                            <div class="bg-emerald-950/60 border border-emerald-500/40 rounded-xl p-3 flex items-center justify-between gap-3">
+                                <div class="flex items-center gap-3">
+                                    <span class="text-2xl">🏆</span>
+                                    <div>
+                                        <div class="text-xs uppercase tracking-wider font-extrabold text-emerald-400">${escapeHtml(p)}</div>
+                                        <div class="text-sm font-bold text-white">${escapeHtml(win.winnerName)} <span class="text-slate-400 font-normal">• "${escapeHtml(win.ticketName)}"</span></div>
+                                    </div>
+                                </div>
+                                <span class="px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-extrabold text-xs">VERIFIED</span>
+                            </div>
+                        `;
+                    }).join('');
                 }
             }
 
-            if (unsubscribeRoom) unsubscribeRoom();
-            if (unsubscribePlayers) unsubscribePlayers();
-            clearSessionState();
-            roomCode = null;
-            isHost = false;
-            calledNumbers = [];
-            currentNumber = null;
-            tickets = [];
-            roomRoster = [];
+            prizeOrder.forEach(p => {
+                const btn = document.getElementById(`claim-${p.toLowerCase().replace(/\s+/g, '-')}`);
+                if (!btn) return;
+                const win = claimsStatus[p];
+                if (win) {
+                    btn.disabled = true;
+                    btn.textContent = `Claimed by ${win.winnerName}`;
+                    btn.className = "w-full py-2.5 bg-slate-800 text-slate-500 font-semibold rounded-lg text-sm cursor-not-allowed border border-slate-700";
+                }
+            });
+        }
 
-            // Reset input fields in lobby
-            const joinCodeInput = document.getElementById('join-room-code');
-            if (joinCodeInput) joinCodeInput.value = '';
-            const joinNameInput = document.getElementById('join-player-name');
-            if (joinNameInput) joinNameInput.value = '';
+        function toggleHostRuleOnePrizePerTicket() {
+            if (!isHost) return;
+            restrictOnePrizePerTicket = !restrictOnePrizePerTicket;
+            updateHostRuleUI();
 
-            document.getElementById('section-lobby').classList.remove('hidden');
-            ['host', 'player', 'players', 'claims'].forEach(t => document.getElementById(`section-${t}`).classList.add('hidden'));
-            document.getElementById('nav-tabs').classList.add('hidden');
-            document.getElementById('leave-room-btn').classList.add('hidden');
-            document.getElementById('room-status-pill').innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span><span>Lobby / Setup</span>`;
-            
-            // Clear URL query parameters and reload to ensure a completely fresh state
-            if (window.history && window.history.replaceState) {
-                const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
-                window.history.replaceState({path: cleanUrl}, '', cleanUrl);
+            if (!isOfflinePractice && db && roomCode) {
+                updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode), {
+                    restrictOnePrizePerTicket: restrictOnePrizePerTicket
+                }).catch(e => console.error("Error updating host rule:", e));
             }
-            window.location.reload();
+        }
+
+        function updateHostRuleUI() {
+            const btn = document.getElementById('host-rule-one-prize-btn');
+            const knob = document.getElementById('host-rule-one-prize-knob');
+            if (!btn || !knob) return;
+
+            btn.setAttribute('aria-checked', restrictOnePrizePerTicket ? 'true' : 'false');
+            if (restrictOnePrizePerTicket) {
+                btn.classList.remove('bg-slate-700');
+                btn.classList.add('bg-emerald-600');
+                knob.classList.remove('translate-x-0');
+                knob.classList.add('translate-x-5');
+            } else {
+                btn.classList.remove('bg-emerald-600');
+                btn.classList.add('bg-slate-700');
+                knob.classList.remove('translate-x-5');
+                knob.classList.add('translate-x-0');
+            }
+            updateHostPrizeAndEligibilityMonitor();
         }
 
         function escapeHtml(str) {
-            if (!str) return '';
-            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
         }
 
-        // Global Exports & Init on Load
-        window.switchTab = switchTab;
-        window.createMultiplayerGame = createMultiplayerGame;
-        window.joinExistingGame = joinExistingGame;
-        window.toggleHostTicketConfig = toggleHostTicketConfig;
-        window.copyInviteLink = copyInviteLink;
-        window.copyShareMessage = copyShareMessage;
-        window.confirmResetRoomNumbers = confirmResetRoomNumbers;
-        window.executeResetRoom = executeResetRoom;
-        window.drawNumber = drawNumber;
-        window.callManualNumber = callManualNumber;
-        window.toggleAutoPlay = toggleAutoPlay;
-        window.updateAutoPlaySpeed = updateAutoPlaySpeed;
-        window.repeatCall = repeatCall;
-        window.toggleAudio = toggleAudio;
-        window.togglePlayerCalledBoard = togglePlayerCalledBoard;
-        window.toggleAutoMark = toggleAutoMark;
-        window.toggleHostRuleOnePrizePerTicket = toggleHostRuleOnePrizePerTicket;
-        window.clearAllDaubs = clearAllDaubs;
-        window.toggleTicketCell = toggleTicketCell;
-        window.updateTicketName = updateTicketName;
-        window.claimPrize = claimPrize;
-        window.claimPrizeForTicket = claimPrizeForTicket;
-        window.closeModal = closeModal;
-        window.returnToLobbyConfirm = returnToLobbyConfirm;
-        window.executeLeaveRoom = executeLeaveRoom;
-
-        window.onload = function() {
+        // Initialize on Window Load & check URL parameters or active session
+        window.onload = async function() {
             const urlParams = new URLSearchParams(window.location.search);
-            const inviteRoom = urlParams.get('room');
-            if (inviteRoom) {
-                document.getElementById('join-room-code').value = inviteRoom.toUpperCase();
-                switchTab('player');
+            const inviteCode = urlParams.get('room');
+            if (inviteCode) {
+                document.getElementById('join-room-code').value = inviteCode.toUpperCase();
             }
-            attemptAutoReconnect();
+            await attemptAutoReconnect();
         };
     </script>
 </body>
