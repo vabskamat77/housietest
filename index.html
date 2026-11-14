@@ -1099,12 +1099,13 @@
                 playerName = document.getElementById('join-player-name').value.trim() || 'Player';
 
                 const roomData = snap.data();
-                // Allow host to rejoin if the user ID matches or if the host name matches case-insensitively
-                if ((user && roomData.hostId === user.uid) || (roomData.hostName && roomData.hostName.trim().toLowerCase() === playerName.trim().toLowerCase())) {
+                // Allow host to rejoin if the user ID matches OR if the host name matches case-insensitively
+                const isMatchingHostName = roomData.hostName && roomData.hostName.trim().toLowerCase() === playerName.trim().toLowerCase();
+                if ((user && roomData.hostId === user.uid) || isMatchingHostName) {
                     isHost = true;
                     // Update hostId to current user if reconnecting with same host name
                     if (user && roomData.hostId !== user.uid) {
-                        await setDoc(roomRef, { hostId: user.uid }, { merge: true });
+                        await setDoc(roomRef, { hostId: user.uid, hostName: playerName }, { merge: true });
                     }
                 } else {
                     isHost = false;
