@@ -755,7 +755,8 @@
                 if (p.serializedTickets) {
                     try {
                         const parsed = JSON.parse(p.serializedTickets);
-                        totalTicketsCount += parsed.length;
+                        // Only count unrestricted tickets
+                        totalTicketsCount += parsed.filter(t => !t.isRestricted).length;
                     } catch (e) {}
                 }
             });
@@ -780,7 +781,10 @@
                     }
                 }
 
-                const ticketsHtml = parsedTickets.map((tkt, tIdx) => {
+                // Filter out restricted tickets from the visible active list on players & tickets tab
+                const activeTicketsList = parsedTickets.filter(t => !t.isRestricted);
+
+                const ticketsHtml = activeTicketsList.map((tkt, tIdx) => {
                     let markedCount = 0;
                     const gridRows = tkt.grid || [];
                     const daubedRows = tkt.daubed || Array.from({ length: 3 }, () => Array(9).fill(false));
@@ -813,15 +817,13 @@
                     ).join('');
 
                     const tktUniqueId = `roster-tkt-${pIdx}-${tIdx}`;
-                    const isRestricted = tkt.isRestricted === true;
 
                     return `
-                        <div class="bg-slate-900/80 border ${isRestricted ? 'border-rose-500/50 bg-rose-950/20' : 'border-slate-700/80'} rounded-xl p-3 space-y-2">
+                        <div class="bg-slate-900/80 border border-slate-700/80 rounded-xl p-3 space-y-2">
                             <div class="flex flex-wrap justify-between items-center gap-1 text-xs">
                                 <div>
                                     <span class="font-bold text-white">Ticket: "${escapeHtml(tkt.name || 'Ticket')}"</span>
                                     <span class="ml-2 font-mono text-[10px] text-indigo-300 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">${escapeHtml(tkt.id || '')}</span>
-                                    ${isRestricted ? `<span class="ml-2 px-1.5 py-0.5 rounded bg-rose-900/60 text-rose-300 border border-rose-500/40 font-bold text-[10px]">Restricted</span>` : ''}
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <span class="px-2 py-0.5 rounded bg-slate-800 text-emerald-400 border border-slate-700 font-semibold">
@@ -830,8 +832,8 @@
                                     <button onclick="document.getElementById('${tktUniqueId}').classList.toggle('hidden')" class="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 text-[11px] font-semibold transition">
                                         Toggle View
                                     </button>
-                                    <button onclick="toggleRestrictTicket('${p.uid}', '${tkt.id}')" class="px-2 py-0.5 ${isRestricted ? 'bg-emerald-800 hover:bg-emerald-700 text-emerald-200' : 'bg-rose-800 hover:bg-rose-700 text-rose-200'} rounded border border-slate-700 text-[11px] font-semibold transition">
-                                        ${isRestricted ? 'Unrestrict' : 'Restrict Ticket'}
+                                    <button onclick="toggleRestrictTicket('${p.uid}', '${tkt.id}')" class="px-2 py-0.5 bg-rose-800 hover:bg-rose-700 text-rose-200 rounded border border-slate-700 text-[11px] font-semibold transition">
+                                        Restrict Ticket
                                     </button>
                                 </div>
                             </div>
@@ -844,7 +846,7 @@
                     `;
                 }).join('');
 
-                const ticketNamesList = parsedTickets.map(t => `"${escapeHtml(t.name || 'Ticket')}"`).join(', ');
+                const ticketNamesList = activeTicketsList.map(t => `"${escapeHtml(t.name || 'Ticket')}"`).join(', ');
 
                 return `
                     <div class="bg-slate-900 border border-slate-700 rounded-xl p-4 space-y-3">
@@ -854,10 +856,10 @@
                                 <span class="font-bold text-white text-sm sm:text-base">${escapeHtml(p.name || 'Player')}</span>
                                 ${ticketNamesList ? `<span class="text-xs text-slate-400 font-medium">(${ticketNamesList})</span>` : ''}
                             </div>
-                            <span class="text-xs text-slate-300 bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">${parsedTickets.length} ticket${parsedTickets.length === 1 ? '' : 's'}</span>
+                            <span class="text-xs text-slate-300 bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">${activeTicketsList.length} ticket${activeTicketsList.length === 1 ? '' : 's'}</span>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                            ${parsedTickets.length > 0 ? ticketsHtml : '<p class="text-xs text-slate-500 italic">No tickets found.</p>'}
+                            ${activeTicketsList.length > 0 ? ticketsHtml : '<p class="text-xs text-slate-500 italic">No active tickets remaining.</p>'}
                         </div>
                     </div>
                 `;
@@ -871,7 +873,7 @@
             if (playerUid === 'local_host' || (currentUser && playerUid === currentUser.uid && isHost)) {
                 const tkt = tickets.find(t => t.id === ticketId);
                 if (tkt) {
-                    tkt.isRestricted = !tkt.isRestricted;
+                    tkt.isRestricted = true;
                     saveSessionState();
                     updateAllRoomUI();
                 }
@@ -891,7 +893,7 @@
                         }
                         parsed = parsed.map(t => {
                             if (t.id === ticketId) {
-                                t.isRestricted = !t.isRestricted;
+                                t.isRestricted = true;
                             }
                             return t;
                         });
@@ -2105,15 +2107,17 @@
             }
 
             listEl.innerHTML = allParticipants.map(p => {
-                let ticketCount = p.ticketCount || 1;
-                let ticketNames = p.ticketNames || [];
+                let parsedTickets = [];
                 if (p.serializedTickets) {
                     try {
-                        const parsed = JSON.parse(p.serializedTickets);
-                        ticketCount = parsed.length;
-                        ticketNames = parsed.map(t => t.name);
-                    } catch (e) {}
+                        parsedTickets = JSON.parse(p.serializedTickets);
+                    } catch (e) {
+                        parsedTickets = [];
+                    }
                 }
+                const activeTickets = parsedTickets.filter(t => !t.isRestricted);
+                const ticketCount = activeTickets.length;
+                const ticketNames = activeTickets.map(t => t.name);
                 const ticketNamesStr = ticketNames.length > 0 ? `• "${ticketNames.join('", "')}"` : '';
 
                 return `
@@ -2206,8 +2210,10 @@
             const container = document.getElementById('tickets-container');
             if (!container) return;
 
-            if (tickets.length === 0) {
-                container.innerHTML = `<p class="text-xs text-slate-500 italic">No tickets generated.</p>`;
+            const activeTickets = tickets.filter(t => !t.isRestricted);
+
+            if (activeTickets.length === 0) {
+                container.innerHTML = `<p class="text-xs text-slate-500 italic">No active tickets remaining.</p>`;
                 return;
             }
 
@@ -2216,18 +2222,7 @@
 
             container.innerHTML = tickets.map((ticket, tIdx) => {
                 if (ticket.isRestricted) {
-                    return `
-                        <div class="bg-rose-950/20 border border-rose-500/50 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3">
-                            <div class="flex justify-between items-center">
-                                <div class="flex items-center gap-2">
-                                    <span class="font-bold text-white">${escapeHtml(ticket.name)}</span>
-                                    <span class="text-[11px] font-mono text-indigo-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-700">${ticket.id}</span>
-                                </div>
-                                <span class="px-2.5 py-1 rounded bg-rose-900/60 text-rose-300 border border-rose-500/40 font-bold text-xs">Restricted / Cannot Play</span>
-                            </div>
-                            <p class="text-xs text-rose-200/70 italic">The host has restricted this ticket from playing further.</p>
-                        </div>
-                    `;
+                    return '';
                 }
 
                 let markedCount = 0;
