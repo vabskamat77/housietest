@@ -1180,8 +1180,8 @@
                             return;
                         }
 
-                        // If current user matches stored host ID or was marked as host in session, restore host rights
-                        if (isHost || (user && roomData.hostId === user.uid)) {
+                        // If current user matches stored host ID, or stored hostName matches session playerName, restore host privileges
+                        if (isHost || (user && roomData.hostId === user.uid) || (roomData.hostName && roomData.hostName.trim().toLowerCase() === playerName.trim().toLowerCase())) {
                             isHost = true;
                         }
 
@@ -1193,9 +1193,9 @@
                         }
 
                         if (user) {
-                            // If user is host, update room doc hostName if needed, otherwise update player roster
-                            if (isHost && roomData.hostId === user.uid) {
+                            if (isHost) {
                                 await setDoc(roomRef, {
+                                    hostId: user.uid,
                                     hostName: playerName
                                 }, { merge: true });
                             }
@@ -2421,6 +2421,33 @@
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#039;');
         }
+
+        // Export functions to window scope for inline HTML event handlers
+        window.createMultiplayerGame = createMultiplayerGame;
+        window.joinExistingGame = joinExistingGame;
+        window.switchTab = switchTab;
+        window.toggleHostTicketConfig = toggleHostTicketConfig;
+        window.toggleAudio = toggleAudio;
+        window.drawNumber = drawNumber;
+        window.callManualNumber = callManualNumber;
+        window.toggleAutoPlay = toggleAutoPlay;
+        window.updateAutoPlaySpeed = updateAutoPlaySpeed;
+        window.repeatCall = repeatCall;
+        window.toggleAutoMark = toggleAutoMark;
+        window.callNumberFromBoard = callNumberFromBoard;
+        window.togglePlayerCalledBoard = togglePlayerCalledBoard;
+        window.updateTicketName = updateTicketName;
+        window.toggleCellDaub = toggleCellDaub;
+        window.clearAllDaubs = clearAllDaubs;
+        window.claimPrize = claimPrize;
+        window.toggleHostRuleOnePrizePerTicket = toggleHostRuleOnePrizePerTicket;
+        window.copyInviteLink = copyInviteLink;
+        window.copyShareMessage = copyShareMessage;
+        window.confirmResetRoomNumbers = confirmResetRoomNumbers;
+        window.resetRoomNumbers = resetRoomNumbers;
+        window.returnToLobbyConfirm = returnToLobbyConfirm;
+        window.executeLeaveRoom = executeLeaveRoom;
+        window.closeModal = closeModal;
 
         // Initialize on Window Load & check URL parameters or active session
         window.onload = async function() {
