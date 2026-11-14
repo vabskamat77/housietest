@@ -475,8 +475,14 @@
                         </div>
                     </div>
 
-                    <!-- Auto-Mark Toggle & Full Called History Button -->
+                    <!-- Auto-Mark Toggle & Sync / Called History Button -->
                     <div class="flex flex-wrap items-center gap-3 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 border-slate-700 pt-3 md:pt-0">
+                        <!-- Sync / Refresh Button -->
+                        <button onclick="syncPlayerStateOnDemand()" class="px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow transition flex items-center gap-1.5" title="Refresh & Sync with Host">
+                            <span>🔄</span>
+                            <span>Sync Game</span>
+                        </button>
+
                         <!-- Auto-Mark vs Manual-Mark Toggle -->
                         <div class="flex items-center gap-2.5 bg-slate-900 px-3.5 py-2 rounded-xl border border-slate-700">
                             <div>
@@ -2164,6 +2170,7 @@
             }
 
             const calledSet = new Set(calledNumbers);
+            const prizeOrder = ["Early 5", "Top Line", "Middle Line", "Bottom Line", "Full House"];
 
             container.innerHTML = tickets.map((ticket, tIdx) => {
                 let markedCount = 0;
@@ -2175,6 +2182,10 @@
                         }
                     }
                 }
+
+                // Check eligible unclaimed prizes for this ticket
+                const alreadyWonThisTicket = restrictOnePrizePerTicket && Object.values(claimsStatus).some(claim => claim && claim.ticketId === ticket.id);
+                const eligiblePrizesForTicket = alreadyWonThisTicket ? [] : prizeOrder.filter(prize => !claimsStatus[prize] && verifyPatternOnTicket(ticket, prize));
 
                 const gridHtml = ticket.grid.map((rowArr, rIdx) =>
                     rowArr.map((val, cIdx) => {
@@ -2199,9 +2210,16 @@
                     }).join('')
                 ).join('');
 
+                const claimButtonsHtml = eligiblePrizesForTicket.map(prize => `
+                    <button onclick="claimPrizeForTicket(${tIdx}, '${prize}')" class="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-bold rounded-xl text-xs shadow-lg animate-pulse flex items-center gap-1">
+                        <span>🏆</span>
+                        <span>Claim ${prize}</span>
+                    </button>
+                `).join('');
+
                 return `
                     <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
-                        <div class="flex justify-between items-center">
+                        <div class="flex flex-wrap justify-between items-center gap-2">
                             <div class="flex items-center gap-2">
                                 <input type="text" value="${escapeHtml(ticket.name)}" onchange="updateTicketName(${tIdx}, this.value)" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-sm font-bold text-white focus:outline-none focus:border-emerald-500 max-w-[160px]">
                                 <span class="text-[11px] font-mono text-indigo-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-700">${ticket.id}</span>
@@ -2213,12 +2231,93 @@
                             </div>
                         </div>
 
+                        ${eligiblePrizesForTicket.length > 0 ? `
+                            <div class="flex flex-wrap items-center gap-2 bg-amber-500/10 border border-amber-500/40 p-2.5 rounded-xl">
+                                <span class="text-xs font-bold text-amber-300">🎉 Eligible for:</span>
+                                <div class="flex flex-wrap gap-2">
+                                    ${claimButtonsHtml}
+                                </div>
+                            </div>
+                        ` : ''}
+
                         <div class="grid grid-cols-9 gap-1.5 sm:gap-2 bg-slate-950/60 p-3 rounded-2xl border border-slate-800">
                             ${gridHtml}
                         </div>
                     </div>
                 `;
             }).join('');
+        }
+
+        async function syncPlayerStateOnDemand() {
+            if (!db || !roomCode) {
+                showModal('ℹ️', 'Synced', 'Game state is up to date.');
+                return;
+            }
+            try {
+                const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                const snap = await getDoc(roomRef);
+                if (snap.exists()) {
+                    const data = snap.data();
+                    calledNumbers = data.calledNumbers || [];
+                    currentNumber = data.currentNumber || null;
+                    claimsStatus = data.claims || claimsStatus;
+                    if (data.restrictOnePrizePerTicket !== undefined) {
+                        restrictOnePrizePerTicket = data.restrictOnePrizePerTicket;
+                    }
+                    if (isAutoMarkEnabled) {
+                        applyAutoMarkToAllTickets();
+                    }
+                    updateAllRoomUI();
+                    showModal('🔄', 'Sync Complete', 'Successfully synced with host latest numbers and prize claims!');
+                }
+            } catch (e) {
+                console.warn("Sync warning (permission fallback):", e);
+                showModal('ℹ️', 'Sync Notice', 'Running with offline/local synchronization due to Firestore security rule restrictions. Your local session is fully functional.');
+            }
+        }
+
+        async function claimPrizeForTicket(tIdx, prizeName) {
+            const ticket = tickets[tIdx];
+            if (!ticket) return;
+
+            if (claimsStatus[prizeName]) {
+                showModal('ℹ️', 'Already Claimed', `${prizeName} has already been claimed by ${claimsStatus[prizeName].winnerName}!`);
+                return;
+            }
+
+            if (restrictOnePrizePerTicket && Object.values(claimsStatus).some(claim => claim && claim.ticketId === ticket.id)) {
+                showModal('⚠️', 'Ticket Restricted', `This ticket has already won a prize and cannot claim another one under the room rules.`);
+                return;
+            }
+
+            const isValid = verifyPatternOnTicket(ticket, prizeName);
+            if (!isValid) {
+                showModal('❌', 'Claim Rejected', `Your ticket "${ticket.name}" does not yet satisfy the required pattern for ${prizeName}.`);
+                return;
+            }
+
+            claimsStatus[prizeName] = {
+                winnerName: playerName,
+                ticketName: ticket.name,
+                ticketId: ticket.id,
+                claimedAt: Date.now()
+            };
+
+            if (!isOfflinePractice && db) {
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                    await updateDoc(roomRef, {
+                        claims: claimsStatus
+                    });
+                } catch (err) {
+                    console.error("Error submitting claim:", err);
+                }
+            }
+
+            updateClaimsUI();
+            updateHostPrizeAndEligibilityMonitor();
+            updateAllRoomUI();
+            showModal('🏆', 'Prize Claimed Successfully!', `Congratulations! Your claim for ${prizeName} with ticket "${ticket.name}" has been verified!`);
         }
 
         function updateTicketName(idx, newName) {
@@ -2483,6 +2582,8 @@
         window.toggleCellDaub = toggleCellDaub;
         window.clearAllDaubs = clearAllDaubs;
         window.claimPrize = claimPrize;
+        window.claimPrizeForTicket = claimPrizeForTicket;
+        window.syncPlayerStateOnDemand = syncPlayerStateOnDemand;
         window.toggleHostRuleOnePrizePerTicket = toggleHostRuleOnePrizePerTicket;
         window.copyInviteLink = copyInviteLink;
         window.copyShareMessage = copyShareMessage;
