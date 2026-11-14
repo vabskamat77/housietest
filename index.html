@@ -699,6 +699,8 @@
                 }
             } catch (err) {
                 console.error("Auth error:", err);
+                // Fallback mock user if authentication fails or is disabled in Firebase console
+                currentUser = { uid: 'offline_user_' + Math.random().toString(36).substring(2, 9) };
             }
             return currentUser;
         }
@@ -1024,14 +1026,11 @@
                     btn.innerHTML = '<span>⏳ Authenticating & Creating...</span>';
 
                     const user = await ensureAuth();
-                    if (!user) {
-                        throw new Error("Authentication failed. Please check Firebase Anonymous Auth settings.");
-                    }
 
                     const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
                     await setDoc(roomRef, {
                         roomCode: roomCode,
-                        hostId: user.uid,
+                        hostId: user ? user.uid : 'local_host',
                         hostName: playerName,
                         calledNumbers: [],
                         currentNumber: null,
@@ -1050,20 +1049,11 @@
                     btn.disabled = false;
                     btn.innerHTML = '<span>🚀 Create Multiplayer Room</span>';
                 } catch (err) {
-                    console.error("Failed to create multiplayer room:", err);
+                    console.error("Failed to create multiplayer room, falling back to practice mode:", err);
                     btn.disabled = false;
                     btn.innerHTML = '<span>🚀 Create Multiplayer Room</span>';
                     
-                    const modal = document.getElementById('custom-modal');
-                    document.getElementById('modal-icon').textContent = '⚠️';
-                    document.getElementById('modal-title').textContent = 'Connection or Permission Notice';
-                    document.getElementById('modal-message').textContent = `Unable to write to the live room database (${err.message || 'Permission denied'}).\n\nWould you like to continue in Solo / Local Practice Mode right now?`;
-                    document.getElementById('modal-actions').innerHTML = `
-                        <button onclick="closeModal()" class="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded-xl text-sm">Cancel</button>
-                        <button onclick="closeModal(); createMultiplayerGame(true);" class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-sm">Play Practice Mode</button>
-                    `;
-                    modal.classList.remove('hidden');
-                    return;
+                    isOfflinePractice = true;
                 }
             }
 
@@ -1103,8 +1093,13 @@
                 playerName = document.getElementById('join-player-name').value.trim() || 'Player';
 
                 const roomData = snap.data();
-                if (roomData.hostId === user.uid || (roomData.hostName && roomData.hostName.toLowerCase() === playerName.toLowerCase())) {
+                // Allow host to rejoin if the user ID matches or if the host name matches case-insensitively
+                if ((user && roomData.hostId === user.uid) || (roomData.hostName && roomData.hostName.trim().toLowerCase() === playerName.trim().toLowerCase())) {
                     isHost = true;
+                    // Update hostId to current user if reconnecting with same host name
+                    if (user && roomData.hostId !== user.uid) {
+                        await setDoc(roomRef, { hostId: user.uid }, { merge: true });
+                    }
                 } else {
                     isHost = false;
                 }
@@ -1136,6 +1131,9 @@
                 calledNumbers = roomData.calledNumbers || [];
                 currentNumber = roomData.currentNumber || null;
                 claimsStatus = roomData.claims || claimsStatus;
+                if (roomData.restrictOnePrizePerTicket !== undefined) {
+                    restrictOnePrizePerTicket = roomData.restrictOnePrizePerTicket;
+                }
 
                 subscribeToRoom(roomCode);
                 enterGameRoomUI();
