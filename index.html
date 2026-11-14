@@ -711,7 +711,7 @@
         let currentNumber = null;
         let autoPlayInterval = null;
         let isAudioEnabled = false; 
-        let isAutoMarkEnabled = true; 
+        let isAutoMarkEnabled = true; // Default auto-mark to true
         let restrictOnePrizePerTicket = false; 
         let lockRoomNewPlayers = false; 
         let tickets = [];
@@ -2280,6 +2280,12 @@
             if (!ticket) return;
             const val = ticket.grid[rIdx][cIdx];
             if (val === 0) return;
+
+            // Check if the number has been called on the host board before allowing manual daubing
+            if (!calledNumbers.includes(val)) {
+                showModal('⚠️', 'Number Not Called', `Number ${val} has not been called yet by the host!`);
+                return;
+            }
 
             ticket.daubed[rIdx][cIdx] = !ticket.daubed[rIdx][cIdx];
             saveSessionState();
