@@ -2237,12 +2237,26 @@
             calledNumbers = [];
             currentNumber = null;
             tickets = [];
+            roomRoster = [];
+
+            // Reset input fields in lobby
+            const joinCodeInput = document.getElementById('join-room-code');
+            if (joinCodeInput) joinCodeInput.value = '';
+            const joinNameInput = document.getElementById('join-player-name');
+            if (joinNameInput) joinNameInput.value = '';
 
             document.getElementById('section-lobby').classList.remove('hidden');
             ['host', 'player', 'players', 'claims'].forEach(t => document.getElementById(`section-${t}`).classList.add('hidden'));
             document.getElementById('nav-tabs').classList.add('hidden');
             document.getElementById('leave-room-btn').classList.add('hidden');
             document.getElementById('room-status-pill').innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span><span>Lobby / Setup</span>`;
+            
+            // Clear URL query parameters and reload to ensure a completely fresh state
+            if (window.history && window.history.replaceState) {
+                const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+                window.history.replaceState({path: cleanUrl}, '', cleanUrl);
+            }
+            window.location.reload();
         }
 
         function escapeHtml(str) {
