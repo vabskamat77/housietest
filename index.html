@@ -1830,6 +1830,10 @@
         }
 
         function toggleTicketCell(ticketId, row, col) {
+            if (isAutoMarkEnabled) {
+                showModal('ℹ️', 'Auto-Mark is ON', 'Manual marking is disabled while Auto-Mark is enabled. Switch Auto-Mark OFF to daub manually.');
+                return;
+            }
             const tkt = tickets.find(t => t.id === ticketId);
             if (!tkt) return;
             const num = tkt.grid[row][col];
@@ -1893,12 +1897,13 @@
                             return `<div class="aspect-square rounded-lg bg-slate-900/40 border border-slate-800"></div>`;
                         }
                         const isMarked = tkt.daubed[rIdx][cIdx];
+                        const cursorStyle = isAutoMarkEnabled ? 'cursor-not-allowed opacity-90' : 'cursor-pointer hover:bg-slate-700';
                         return `
                             <button type="button" onclick="toggleTicketCell('${tkt.id}', ${rIdx}, ${cIdx})"
-                                class="ticket-cell aspect-square rounded-lg font-extrabold text-sm sm:text-base flex items-center justify-center border select-none ${
+                                class="ticket-cell aspect-square rounded-lg font-extrabold text-sm sm:text-base flex items-center justify-center border select-none ${cursorStyle} ${
                                     isMarked
                                         ? 'bg-emerald-600 text-white border-emerald-400 shadow-inner scale-95'
-                                        : 'bg-slate-900 hover:bg-slate-700 text-slate-100 border-slate-700'
+                                        : 'bg-slate-900 text-slate-100 border-slate-700'
                                 }">
                                 ${val}
                             </button>
