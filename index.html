@@ -1153,6 +1153,11 @@
                             return;
                         }
 
+                        // If current user matches stored host ID or was marked as host in session, restore host rights
+                        if (isHost || (user && roomData.hostId === user.uid)) {
+                            isHost = true;
+                        }
+
                         calledNumbers = roomData.calledNumbers || [];
                         currentNumber = roomData.currentNumber || null;
                         claimsStatus = roomData.claims || claimsStatus;
@@ -1161,6 +1166,13 @@
                         }
 
                         if (user) {
+                            // If user is host, update room doc hostName if needed, otherwise update player roster
+                            if (isHost && roomData.hostId === user.uid) {
+                                await setDoc(roomRef, {
+                                    hostName: playerName
+                                }, { merge: true });
+                            }
+
                             const playerRef = doc(db, 'artifacts', appId, 'public', 'data', `tambola_players_${roomCode}`, user.uid);
                             await setDoc(playerRef, {
                                 uid: user.uid,
