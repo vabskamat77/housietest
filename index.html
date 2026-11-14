@@ -357,16 +357,24 @@
             </div>
 
             <!-- Host Rules Option Banner -->
-            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-wrap items-center justify-between gap-4">
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
                 <div>
-                    <h3 class="text-sm font-bold text-white">Prize Restriction Rules</h3>
-                    <p class="text-xs text-slate-400">Configure whether a ticket can claim multiple prizes or is restricted after winning.</p>
+                    <h3 class="text-sm font-bold text-white">Restrictions/Rules</h3>
+                    <p class="text-xs text-slate-400">Configure ticket claiming restrictions and room entry rules.</p>
                 </div>
-                <div class="flex items-center gap-3 bg-slate-900 px-4 py-2 rounded-xl border border-slate-700">
-                    <span class="text-xs font-bold text-slate-200">Restrict ticket from claiming another prize once won</span>
-                    <button type="button" id="host-rule-one-prize-btn" onclick="toggleHostRuleOnePrizePerTicket()" role="switch" aria-checked="false" class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-slate-700 transition-colors duration-200 ease-in-out focus:outline-none">
-                        <span id="host-rule-one-prize-knob" class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0"></span>
-                    </button>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div class="flex items-center justify-between gap-3 bg-slate-900 px-4 py-3 rounded-xl border border-slate-700">
+                        <span class="text-xs font-bold text-slate-200">Restrict ticket from claiming another prize once won</span>
+                        <button type="button" id="host-rule-one-prize-btn" onclick="toggleHostRuleOnePrizePerTicket()" role="switch" aria-checked="false" class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-slate-700 transition-colors duration-200 ease-in-out focus:outline-none">
+                            <span id="host-rule-one-prize-knob" class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0"></span>
+                        </button>
+                    </div>
+                    <div class="flex items-center justify-between gap-3 bg-slate-900 px-4 py-3 rounded-xl border border-slate-700">
+                        <span class="text-xs font-bold text-slate-200">Do not allow new players to join</span>
+                        <button type="button" id="host-rule-lock-room-btn" onclick="toggleHostRuleLockRoom()" role="switch" aria-checked="false" class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-slate-700 transition-colors duration-200 ease-in-out focus:outline-none">
+                            <span id="host-rule-lock-room-knob" class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0"></span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -706,6 +714,7 @@
         let isAudioEnabled = false; // Default muted
         let isAutoMarkEnabled = true; // Default auto-mark
         let restrictOnePrizePerTicket = false; // Host rule option
+        let lockRoomNewPlayers = false; // Host rule option: do not allow new players to join
         let tickets = [];
         let claimsStatus = {
             "Early 5": null,
@@ -804,13 +813,15 @@
                     ).join('');
 
                     const tktUniqueId = `roster-tkt-${pIdx}-${tIdx}`;
+                    const isRestricted = tkt.isRestricted === true;
 
                     return `
-                        <div class="bg-slate-900/80 border border-slate-700/80 rounded-xl p-3 space-y-2">
+                        <div class="bg-slate-900/80 border ${isRestricted ? 'border-rose-500/50 bg-rose-950/20' : 'border-slate-700/80'} rounded-xl p-3 space-y-2">
                             <div class="flex flex-wrap justify-between items-center gap-1 text-xs">
                                 <div>
                                     <span class="font-bold text-white">Ticket: "${escapeHtml(tkt.name || 'Ticket')}"</span>
                                     <span class="ml-2 font-mono text-[10px] text-indigo-300 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">${escapeHtml(tkt.id || '')}</span>
+                                    ${isRestricted ? `<span class="ml-2 px-1.5 py-0.5 rounded bg-rose-900/60 text-rose-300 border border-rose-500/40 font-bold text-[10px]">Restricted</span>` : ''}
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <span class="px-2 py-0.5 rounded bg-slate-800 text-emerald-400 border border-slate-700 font-semibold">
@@ -818,6 +829,9 @@
                                     </span>
                                     <button onclick="document.getElementById('${tktUniqueId}').classList.toggle('hidden')" class="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 text-[11px] font-semibold transition">
                                         Toggle View
+                                    </button>
+                                    <button onclick="toggleRestrictTicket('${p.uid}', '${tkt.id}')" class="px-2 py-0.5 ${isRestricted ? 'bg-emerald-800 hover:bg-emerald-700 text-emerald-200' : 'bg-rose-800 hover:bg-rose-700 text-rose-200'} rounded border border-slate-700 text-[11px] font-semibold transition">
+                                        ${isRestricted ? 'Unrestrict' : 'Restrict Ticket'}
                                     </button>
                                 </div>
                             </div>
@@ -848,6 +862,47 @@
                     </div>
                 `;
             }).join('');
+        }
+
+        async function toggleRestrictTicket(playerUid, ticketId) {
+            if (!isHost) return;
+
+            // If player is local host
+            if (playerUid === 'local_host' || (currentUser && playerUid === currentUser.uid && isHost)) {
+                const tkt = tickets.find(t => t.id === ticketId);
+                if (tkt) {
+                    tkt.isRestricted = !tkt.isRestricted;
+                    saveSessionState();
+                    updateAllRoomUI();
+                }
+                return;
+            }
+
+            // Otherwise update in Firestore players collection
+            if (!isOfflinePractice && db && roomCode) {
+                try {
+                    const playerRef = doc(db, 'artifacts', appId, 'public', 'data', `tambola_players_${roomCode}`, playerUid);
+                    const snap = await getDoc(playerRef);
+                    if (snap.exists()) {
+                        const data = snap.data();
+                        let parsed = [];
+                        if (data.serializedTickets) {
+                            try { parsed = JSON.parse(data.serializedTickets); } catch (e) {}
+                        }
+                        parsed = parsed.map(t => {
+                            if (t.id === ticketId) {
+                                t.isRestricted = !t.isRestricted;
+                            }
+                            return t;
+                        });
+                        await updateDoc(playerRef, {
+                            serializedTickets: JSON.stringify(parsed)
+                        });
+                    }
+                } catch (err) {
+                    console.error("Error toggling ticket restriction:", err);
+                }
+            }
         }
 
         // LocalStorage Persistence Helpers for Disconnects & Refreshes
@@ -1065,16 +1120,24 @@
                     return;
                 }
 
+                const roomData = snap.data();
+                const isMatchingHostName = roomData.hostName && roomData.hostName.trim().toLowerCase() === document.getElementById('join-player-name').value.trim().toLowerCase();
+                const isExistingHost = (user && roomData.hostId === user.uid) || isMatchingHostName;
+
+                // Check if room is locked for new players and user is not the host
+                if (roomData.lockRoomNewPlayers && !isExistingHost) {
+                    showModal('🔒', 'Room Locked', 'The host has locked this room and is not allowing new players to join.');
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>🎯 Join Live Game</span>';
+                    return;
+                }
+
                 roomCode = codeInput;
                 isOfflinePractice = false;
                 playerName = document.getElementById('join-player-name').value.trim() || 'Player';
 
-                const roomData = snap.data();
-                // Allow host to rejoin if the user ID matches OR if the host name matches case-insensitively
-                const isMatchingHostName = roomData.hostName && roomData.hostName.trim().toLowerCase() === playerName.trim().toLowerCase();
-                if ((user && roomData.hostId === user.uid) || isMatchingHostName) {
+                if (isExistingHost) {
                     isHost = true;
-                    // Update hostId to current user if reconnecting with same host name
                     if (user && roomData.hostId !== user.uid) {
                         await setDoc(roomRef, { hostId: user.uid, hostName: playerName }, { merge: true });
                     }
@@ -1111,6 +1174,9 @@
                 claimsStatus = roomData.claims || claimsStatus;
                 if (roomData.restrictOnePrizePerTicket !== undefined) {
                     restrictOnePrizePerTicket = roomData.restrictOnePrizePerTicket;
+                }
+                if (roomData.lockRoomNewPlayers !== undefined) {
+                    lockRoomNewPlayers = roomData.lockRoomNewPlayers;
                 }
 
                 subscribeToRoom(roomCode);
@@ -1166,6 +1232,10 @@
                         claimsStatus = roomData.claims || claimsStatus;
                         if (roomData.restrictOnePrizePerTicket !== undefined) {
                             restrictOnePrizePerTicket = roomData.restrictOnePrizePerTicket;
+                        }
+                        if (roomData.lockRoomNewPlayers !== undefined) {
+                            lockRoomNewPlayers = roomData.lockRoomNewPlayers;
+                            updateHostRuleUI();
                         }
 
                         if (user) {
@@ -1226,7 +1296,6 @@
                 if (!snap.exists()) return;
                 const data = snap.data();
                 
-                // If room was closed by the host, kick out non-host players
                 if (data.roomClosed && !isHost) {
                     if (unsubscribeRoom) unsubscribeRoom();
                     if (unsubscribePlayers) unsubscribePlayers();
@@ -1252,6 +1321,10 @@
                 claimsStatus = data.claims || claimsStatus;
                 if (data.restrictOnePrizePerTicket !== undefined) {
                     restrictOnePrizePerTicket = data.restrictOnePrizePerTicket;
+                    updateHostRuleUI();
+                }
+                if (data.lockRoomNewPlayers !== undefined) {
+                    lockRoomNewPlayers = data.lockRoomNewPlayers;
                     updateHostRuleUI();
                 }
 
@@ -1461,6 +1534,9 @@
                 (player.tickets || []).forEach(tkt => {
                     if (!tkt || !tkt.grid) return;
                     
+                    // If the ticket is restricted by host from playing further, skip it
+                    if (tkt.isRestricted) return;
+
                     // If the ticket is restricted because it already won a prize, skip it
                     const alreadyWonThisTicket = restrictOnePrizePerTicket && Object.values(claimsStatus).some(claim => claim && claim.ticketId === tkt.id);
                     if (alreadyWonThisTicket) return;
@@ -2139,6 +2215,21 @@
             const prizeOrder = ["Early 5", "Top Line", "Middle Line", "Bottom Line", "Full House"];
 
             container.innerHTML = tickets.map((ticket, tIdx) => {
+                if (ticket.isRestricted) {
+                    return `
+                        <div class="bg-rose-950/20 border border-rose-500/50 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3">
+                            <div class="flex justify-between items-center">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold text-white">${escapeHtml(ticket.name)}</span>
+                                    <span class="text-[11px] font-mono text-indigo-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-700">${ticket.id}</span>
+                                </div>
+                                <span class="px-2.5 py-1 rounded bg-rose-900/60 text-rose-300 border border-rose-500/40 font-bold text-xs">Restricted / Cannot Play</span>
+                            </div>
+                            <p class="text-xs text-rose-200/70 italic">The host has restricted this ticket from playing further.</p>
+                        </div>
+                    `;
+                }
+
                 let markedCount = 0;
                 for (let r = 0; r < 3; r++) {
                     for (let c = 0; c < 9; c++) {
@@ -2217,6 +2308,11 @@
         async function claimPrizeForTicket(tIdx, prizeName) {
             const ticket = tickets[tIdx];
             if (!ticket) return;
+
+            if (ticket.isRestricted) {
+                showModal('⚠️', 'Ticket Restricted', 'This ticket has been restricted by the host and cannot claim prizes.');
+                return;
+            }
 
             if (claimsStatus[prizeName]) {
                 showModal('ℹ️', 'Already Claimed', `${prizeName} has already been claimed by ${claimsStatus[prizeName].winnerName}!`);
@@ -2314,6 +2410,7 @@
         }
 
         function verifyPatternOnTicket(ticket, prizeName) {
+            if (ticket.isRestricted) return false;
             const calledSet = new Set(calledNumbers);
             const grid = ticket.grid;
             const daubed = ticket.daubed;
@@ -2383,6 +2480,11 @@
             const ticket = tickets[tIdx];
             if (!ticket) {
                 showModal('⚠️', 'Invalid Ticket', 'Selected ticket not found.');
+                return;
+            }
+
+            if (ticket.isRestricted) {
+                showModal('⚠️', 'Ticket Restricted', 'This ticket has been restricted by the host and cannot claim prizes.');
                 return;
             }
 
@@ -2472,23 +2574,53 @@
             }
         }
 
+        function toggleHostRuleLockRoom() {
+            if (!isHost) return;
+            lockRoomNewPlayers = !lockRoomNewPlayers;
+            updateHostRuleUI();
+
+            if (!isOfflinePractice && db && roomCode) {
+                updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode), {
+                    lockRoomNewPlayers: lockRoomNewPlayers
+                }).catch(e => console.error("Error updating room lock rule:", e));
+            }
+        }
+
         function updateHostRuleUI() {
             const btn = document.getElementById('host-rule-one-prize-btn');
             const knob = document.getElementById('host-rule-one-prize-knob');
-            if (!btn || !knob) return;
-
-            btn.setAttribute('aria-checked', restrictOnePrizePerTicket ? 'true' : 'false');
-            if (restrictOnePrizePerTicket) {
-                btn.classList.remove('bg-slate-700');
-                btn.classList.add('bg-emerald-600');
-                knob.classList.remove('translate-x-0');
-                knob.classList.add('translate-x-5');
-            } else {
-                btn.classList.remove('bg-emerald-600');
-                btn.classList.add('bg-slate-700');
-                knob.classList.remove('translate-x-5');
-                knob.classList.add('translate-x-0');
+            if (btn && knob) {
+                btn.setAttribute('aria-checked', restrictOnePrizePerTicket ? 'true' : 'false');
+                if (restrictOnePrizePerTicket) {
+                    btn.classList.remove('bg-slate-700');
+                    btn.classList.add('bg-emerald-600');
+                    knob.classList.remove('translate-x-0');
+                    knob.classList.add('translate-x-5');
+                } else {
+                    btn.classList.remove('bg-emerald-600');
+                    btn.classList.add('bg-slate-700');
+                    knob.classList.remove('translate-x-5');
+                    knob.classList.add('translate-x-0');
+                }
             }
+
+            const lockBtn = document.getElementById('host-rule-lock-room-btn');
+            const lockKnob = document.getElementById('host-rule-lock-room-knob');
+            if (lockBtn && lockKnob) {
+                lockBtn.setAttribute('aria-checked', lockRoomNewPlayers ? 'true' : 'false');
+                if (lockRoomNewPlayers) {
+                    lockBtn.classList.remove('bg-slate-700');
+                    lockBtn.classList.add('bg-emerald-600');
+                    lockKnob.classList.remove('translate-x-0');
+                    lockKnob.classList.add('translate-x-5');
+                } else {
+                    lockBtn.classList.remove('bg-emerald-600');
+                    lockBtn.classList.add('bg-slate-700');
+                    lockKnob.classList.remove('translate-x-5');
+                    lockKnob.classList.add('translate-x-0');
+                }
+            }
+
             updateHostPrizeAndEligibilityMonitor();
         }
 
@@ -2522,6 +2654,8 @@
         window.claimPrize = claimPrize;
         window.claimPrizeForTicket = claimPrizeForTicket;
         window.toggleHostRuleOnePrizePerTicket = toggleHostRuleOnePrizePerTicket;
+        window.toggleHostRuleLockRoom = toggleHostRuleLockRoom;
+        window.toggleRestrictTicket = toggleRestrictTicket;
         window.copyInviteLink = copyInviteLink;
         window.copyShareMessage = copyShareMessage;
         window.confirmResetRoomNumbers = confirmResetRoomNumbers;
