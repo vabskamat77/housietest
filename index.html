@@ -243,9 +243,15 @@
 
                     <!-- Action Buttons -->
                     <div class="space-y-3 mt-2">
-                        <button onclick="drawNumber()" id="draw-btn" class="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl shadow-lg transition transform active:scale-95 flex items-center justify-center space-x-2 text-base sm:text-lg">
-                            <span>🎲 Draw Next Number</span>
-                        </button>
+                        <div class="grid grid-cols-12 gap-2">
+                            <button onclick="drawNumber()" id="draw-btn" class="col-span-8 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl shadow-lg transition transform active:scale-95 flex items-center justify-center space-x-2 text-sm sm:text-base">
+                                <span>🎲 Draw Next</span>
+                            </button>
+                            <button onclick="undrawLastNumber()" id="undraw-btn" class="col-span-4 py-3.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold rounded-xl shadow transition flex items-center justify-center gap-1 text-xs sm:text-sm" title="Undo Last Called Number">
+                                <span>↩️</span>
+                                <span>Back</span>
+                            </button>
+                        </div>
                         <!-- Manual Number Entry -->
                         <div class="flex gap-2">
                             <input type="number" id="manual-number-input" min="1" max="90" placeholder="Enter 1-90" onkeydown="if(event.key==='Enter') callManualNumber()" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm font-bold text-amber-300 placeholder-slate-500 focus:outline-none focus:border-emerald-500">
@@ -1634,6 +1640,13 @@
             currentNumber = null;
             tickets = [];
             roomRoster = [];
+            claimsStatus = {
+                "Early 5": null,
+                "Top Line": null,
+                "Middle Line": null,
+                "Bottom Line": null,
+                "Full House": null
+            };
 
             if (autoPlayInterval) {
                 clearInterval(autoPlayInterval);
@@ -1653,7 +1666,7 @@
                 }
             } catch (e) {}
 
-            showModal('👋', 'Left Room', 'You have successfully left the game room.');
+            showModal('👋', 'Left Room', 'All room data and session details have been refreshed and cleared.');
         }
 
         window.executeLeaveRoom = executeLeaveRoom;
@@ -1756,6 +1769,37 @@
             }
 
             speakNumber(currentNumber);
+            updateAllRoomUI();
+        }
+
+        async function undrawLastNumber() {
+            if (!isHost) return;
+            if (calledNumbers.length === 0) {
+                showModal('ℹ️', 'No Numbers', 'No numbers have been called yet to undo.');
+                return;
+            }
+
+            // Remove the last called number
+            calledNumbers.pop();
+            // Set currentNumber to the new last called number, or null if none left
+            currentNumber = calledNumbers.length > 0 ? calledNumbers[calledNumbers.length - 1] : null;
+
+            if (isAutoMarkEnabled) {
+                applyAutoMarkToAllTickets();
+            }
+
+            if (!isOfflinePractice && db) {
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                    await updateDoc(roomRef, {
+                        calledNumbers: calledNumbers,
+                        currentNumber: currentNumber
+                    });
+                } catch (err) {
+                    console.error("Error updating undrawn number:", err);
+                }
+            }
+
             updateAllRoomUI();
         }
 
@@ -2427,6 +2471,7 @@
         window.toggleHostTicketConfig = toggleHostTicketConfig;
         window.toggleAudio = toggleAudio;
         window.drawNumber = drawNumber;
+        window.undrawLastNumber = undrawLastNumber;
         window.callManualNumber = callManualNumber;
         window.toggleAutoPlay = toggleAutoPlay;
         window.updateAutoPlaySpeed = updateAutoPlaySpeed;
