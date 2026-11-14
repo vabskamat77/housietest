@@ -350,6 +350,20 @@
                 </div>
             </div>
 
+            <!-- Host Rules Option Banner -->
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <h3 class="text-sm font-bold text-white">Prize Restriction Rules</h3>
+                    <p class="text-xs text-slate-400">Configure whether a ticket can claim multiple prizes or is restricted after winning.</p>
+                </div>
+                <div class="flex items-center gap-3 bg-slate-900 px-4 py-2 rounded-xl border border-slate-700">
+                    <span class="text-xs font-bold text-slate-200">Restrict ticket from claiming another prize once won</span>
+                    <button type="button" id="host-rule-one-prize-btn" onclick="toggleHostRuleOnePrizePerTicket()" role="switch" aria-checked="false" class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-slate-700 transition-colors duration-200 ease-in-out focus:outline-none">
+                        <span id="host-rule-one-prize-knob" class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0"></span>
+                    </button>
+                </div>
+            </div>
+
             <!-- Host's Own Playing Tickets (Shown if Host is playing with tickets) -->
             <div id="host-tickets-section" class="hidden bg-slate-800 border border-slate-700 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
                 <div class="flex flex-wrap justify-between items-center gap-3">
@@ -685,6 +699,7 @@
         let autoPlayInterval = null;
         let isAudioEnabled = false; // Default muted
         let isAutoMarkEnabled = true; // Default auto-mark
+        let restrictOnePrizePerTicket = false; // Host rule option
         let tickets = [];
         let claimsStatus = {
             "Early 5": null,
@@ -993,6 +1008,7 @@
                         hostName: playerName,
                         calledNumbers: [],
                         currentNumber: null,
+                        restrictOnePrizePerTicket: restrictOnePrizePerTicket,
                         claims: {
                             "Early 5": null,
                             "Top Line": null,
@@ -1172,6 +1188,10 @@
                 calledNumbers = data.calledNumbers || [];
                 currentNumber = data.currentNumber || null;
                 claimsStatus = data.claims || claimsStatus;
+                if (data.restrictOnePrizePerTicket !== undefined) {
+                    restrictOnePrizePerTicket = data.restrictOnePrizePerTicket;
+                    updateHostRuleUI();
+                }
 
                 if (currentNumber && currentNumber !== prevCurrent && !isHost) {
                     speakNumber(currentNumber);
@@ -1814,6 +1834,41 @@
             updateAllRoomUI();
         }
 
+        function toggleHostRuleOnePrizePerTicket() {
+            if (!isHost) return;
+            restrictOnePrizePerTicket = !restrictOnePrizePerTicket;
+            updateHostRuleUI();
+
+            if (!isOfflinePractice && db && roomCode) {
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                    updateDoc(roomRef, {
+                        restrictOnePrizePerTicket: restrictOnePrizePerTicket
+                    });
+                } catch (err) {
+                    console.error("Error updating rule setting:", err);
+                }
+            }
+        }
+
+        function updateHostRuleUI() {
+            const btn = document.getElementById('host-rule-one-prize-btn');
+            const knob = document.getElementById('host-rule-one-prize-knob');
+            if (!btn || !knob) return;
+            btn.setAttribute('aria-checked', restrictOnePrizePerTicket ? 'true' : 'false');
+            if (restrictOnePrizePerTicket) {
+                btn.classList.remove('bg-slate-700');
+                btn.classList.add('bg-emerald-600');
+                knob.classList.remove('translate-x-0');
+                knob.classList.add('translate-x-5');
+            } else {
+                btn.classList.remove('bg-emerald-600');
+                btn.classList.add('bg-slate-700');
+                knob.classList.remove('translate-x-5');
+                knob.classList.add('translate-x-0');
+            }
+        }
+
         function applyAutoMarkToAllTickets() {
             const calledSet = new Set(calledNumbers);
             tickets.forEach(tkt => {
@@ -1831,34 +1886,26 @@
 
         function toggleTicketCell(ticketId, row, col) {
             if (isAutoMarkEnabled) {
-                showModal('ℹ️', 'Auto-Mark is ON', 'Manual marking is disabled while Auto-Mark is enabled. Switch Auto-Mark OFF to daub manually.');
                 return;
             }
             const tkt = tickets.find(t => t.id === ticketId);
             if (!tkt) return;
-            const num = tkt.grid[row][col];
-            if (!num) return;
+            const val = tkt.grid[row][col];
+            if (val === 0) return;
+
+            const calledSet = new Set(calledNumbers);
+            if (!calledSet.has(val)) {
+                return;
+            }
 
             tkt.daubed[row][col] = !tkt.daubed[row][col];
             saveSessionState();
             updateAllRoomUI();
         }
 
-        function renameTicket(ticketId, newName) {
-            const tkt = tickets.find(t => t.id === ticketId);
-            if (!tkt) return;
-            const trimmed = newName.trim();
-            if (trimmed) {
-                tkt.name = trimmed;
-                saveSessionState();
-                syncPlayerMetadata();
-                populateClaimTicketSelector();
-            }
-        }
-
         function clearAllDaubs() {
-            tickets.forEach(t => {
-                t.daubed = Array.from({ length: 3 }, () => Array(9).fill(false));
+            tickets.forEach(tkt => {
+                tkt.daubed = Array.from({ length: 3 }, () => Array(9).fill(false));
             });
             saveSessionState();
             updateAllRoomUI();
@@ -1869,316 +1916,254 @@
             if (!container) return;
 
             if (tickets.length === 0) {
-                container.innerHTML = `
-                    <div class="col-span-full bg-slate-800/70 border border-slate-700 rounded-2xl p-8 text-center space-y-3">
-                        <div class="text-3xl">🎟️</div>
-                        <h3 class="font-bold text-white">No Tickets Assigned</h3>
-                        <p class="text-xs text-slate-400">You joined this room as a spectator/host without playing tickets.</p>
-                    </div>
-                `;
+                container.innerHTML = `<div class="col-span-full bg-slate-800 border border-slate-700 rounded-2xl p-8 text-center text-slate-400">No tickets generated.</div>`;
                 return;
             }
 
-            const prizeOrder = ["Early 5", "Top Line", "Middle Line", "Bottom Line", "Full House"];
+            const calledSet = new Set(calledNumbers);
 
-            container.innerHTML = tickets.map(tkt => {
+            container.innerHTML = tickets.map((tkt, tIdx) => {
                 let markedCount = 0;
-                for (let r = 0; r < 3; r++) {
-                    for (let c = 0; c < 9; c++) {
-                        if (tkt.grid[r][c] > 0 && tkt.daubed[r][c]) markedCount++;
-                    }
-                }
-
-                const eligiblePrizes = prizeOrder.filter(p => !claimsStatus[p] && verifyPatternOnTicket(tkt, p));
-
-                const gridHtml = tkt.grid.map((rowArr, rIdx) =>
-                    rowArr.map((val, cIdx) => {
+                const gridHtml = tkt.grid.map((rowArr, rIdx) => {
+                    return rowArr.map((val, cIdx) => {
                         if (val === 0) {
-                            return `<div class="aspect-square rounded-lg bg-slate-900/40 border border-slate-800"></div>`;
+                            return `<div class="aspect-square rounded-xl bg-slate-900/40 border border-slate-800/80"></div>`;
                         }
-                        const isMarked = tkt.daubed[rIdx][cIdx];
-                        const cursorStyle = isAutoMarkEnabled ? 'cursor-not-allowed opacity-90' : 'cursor-pointer hover:bg-slate-700';
-                        return `
-                            <button type="button" onclick="toggleTicketCell('${tkt.id}', ${rIdx}, ${cIdx})"
-                                class="ticket-cell aspect-square rounded-lg font-extrabold text-sm sm:text-base flex items-center justify-center border select-none ${cursorStyle} ${
-                                    isMarked
-                                        ? 'bg-emerald-600 text-white border-emerald-400 shadow-inner scale-95'
-                                        : 'bg-slate-900 text-slate-100 border-slate-700'
-                                }">
-                                ${val}
-                            </button>
-                        `;
-                    }).join('')
-                ).join('');
+                        const isCalled = calledSet.has(val);
+                        const isDaubed = tkt.daubed[rIdx][cIdx] || (isAutoMarkEnabled && isCalled);
+                        if (isDaubed) markedCount++;
 
-                const eligibleBanner = eligiblePrizes.length > 0 ? `
-                    <div class="mt-3 pt-3 border-t border-amber-500/30 flex flex-wrap items-center justify-between gap-2">
-                        <span class="text-xs font-bold text-amber-300">🎉 Eligible to Claim:</span>
-                        <div class="flex flex-wrap gap-1.5">
-                            ${eligiblePrizes.map(p => `
-                                <button type="button" onclick="claimPrizeForTicket('${tkt.id}', '${p}')"
-                                    class="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-extrabold text-xs rounded-lg shadow animate-pulse">
-                                    Claim ${escapeHtml(p)} 🏆
-                                </button>
-                            `).join('')}
-                        </div>
-                    </div>
-                ` : '';
+                        let cellClass = 'bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500 cursor-pointer';
+                        if (isDaubed) {
+                            cellClass = 'bg-emerald-600 text-white font-black border-emerald-400 shadow-md scale-95';
+                        } else if (isCalled) {
+                            cellClass = 'bg-amber-500/20 text-amber-300 border-amber-500/60 animate-pulse';
+                        }
+
+                        return `
+                            <div onclick="toggleTicketCell('${tkt.id}', ${rIdx}, ${cIdx})" class="ticket-cell aspect-square rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center border transition select-none ${cellClass}">
+                                ${val}
+                            </div>
+                        `;
+                    }).join('');
+                }).join('');
 
                 return `
-                    <div class="bg-slate-800/95 border ${eligiblePrizes.length > 0 ? 'border-amber-400 ring-2 ring-amber-400/30' : 'border-slate-700'} rounded-2xl p-4 sm:p-5 shadow-xl">
-                        <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
-                            <div class="flex items-center gap-2 min-w-0 flex-1">
-                                <span class="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-700 font-mono text-[11px] font-bold text-indigo-300 select-all flex-shrink-0" title="Unique Ticket ID">
-                                    ${escapeHtml(tkt.id)}
-                                </span>
-                                <input type="text" value="${escapeHtml(tkt.name)}" onchange="renameTicket('${tkt.id}', this.value)"
-                                    class="bg-transparent border-b border-transparent hover:border-slate-600 focus:border-emerald-500 font-bold text-sm sm:text-base text-white focus:outline-none px-1 py-0.5 w-full min-w-0" />
+                    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-xl space-y-4">
+                        <div class="flex flex-wrap justify-between items-center gap-2">
+                            <div class="flex items-center gap-2">
+                                <span class="px-2.5 py-1 rounded-lg bg-indigo-900/60 text-indigo-300 border border-indigo-500/30 text-xs font-bold">Ticket ${tIdx + 1}</span>
+                                <input type="text" value="${escapeHtml(tkt.name)}" onchange="updateTicketName('${tkt.id}', this.value)" class="bg-slate-900 border border-slate-700 text-white text-xs sm:text-sm font-semibold rounded-lg px-2.5 py-1 focus:outline-none focus:border-emerald-500 max-w-[160px]">
                             </div>
-                            <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-900 text-emerald-400 border border-slate-700 flex-shrink-0">
-                                ${markedCount} / 15 Marked
-                            </span>
+                            <div class="flex items-center gap-2">
+                                <span class="font-mono text-xs text-slate-400">${escapeHtml(tkt.id)}</span>
+                                <span class="px-2.5 py-1 rounded-lg bg-slate-900 text-emerald-400 border border-slate-700 text-xs font-bold">${markedCount} / 15 Called</span>
+                            </div>
                         </div>
-                        <div class="grid grid-cols-9 gap-1 sm:gap-1.5">
+                        <div class="grid grid-cols-9 gap-1.5 sm:gap-2 bg-slate-950/60 p-3 rounded-xl border border-slate-700/80">
                             ${gridHtml}
                         </div>
-                        ${eligibleBanner}
                     </div>
                 `;
             }).join('');
         }
 
-        // =========================================================================
-        // PATTERN VERIFICATION & PRIZE CLAIMS
-        // =========================================================================
-
-        function verifyPatternOnTicket(tkt, prizeName) {
-            if (!tkt || !tkt.grid || calledNumbers.length === 0) return false;
-            const calledSet = new Set(calledNumbers);
-
-            const isRowComplete = (r) => {
-                let count = 0;
-                for (let c = 0; c < 9; c++) {
-                    const val = tkt.grid[r][c];
-                    if (val > 0) {
-                        if (!calledSet.has(val)) return false;
-                        count++;
-                    }
-                }
-                return count === 5;
-            };
-
-            if (prizeName === 'Top Line') return isRowComplete(0);
-            if (prizeName === 'Middle Line') return isRowComplete(1);
-            if (prizeName === 'Bottom Line') return isRowComplete(2);
-
-            let totalMatched = 0;
-            for (let r = 0; r < 3; r++) {
-                for (let c = 0; c < 9; c++) {
-                    const val = tkt.grid[r][c];
-                    if (val > 0 && calledSet.has(val)) {
-                        totalMatched++;
-                    }
-                }
+        function updateTicketName(ticketId, newName) {
+            const tkt = tickets.find(t => t.id === ticketId);
+            if (tkt) {
+                tkt.name = newName.trim() || `Ticket`;
+                saveSessionState();
+                syncPlayerMetadata();
+                populateClaimTicketSelector();
             }
-
-            if (prizeName === 'Early 5') return totalMatched >= 5;
-            if (prizeName === 'Full House') return totalMatched === 15;
-            return false;
         }
+
+        function syncPlayerMetadata() {
+            if (isOfflinePractice || !db || !roomCode) return;
+            ensureAuth().then(user => {
+                if (!user) return;
+                const playerRef = doc(db, 'artifacts', appId, 'public', 'data', `tambola_players_${roomCode}`, user.uid);
+                setDoc(playerRef, {
+                    uid: user.uid,
+                    name: playerName,
+                    ticketCount: tickets.length,
+                    ticketNames: tickets.map(t => t.name),
+                    serializedTickets: JSON.stringify(tickets.map(t => ({ id: t.id, name: t.name, grid: t.grid, daubed: t.daubed }))),
+                    updatedAt: Date.now()
+                }, { merge: true }).catch(err => console.error("Sync player meta error:", err));
+            });
+        }
+
+        // =========================================================================
+        // PRIZES & CLAIMS ENGINE
+        // =========================================================================
 
         function populateClaimTicketSelector() {
             const sel = document.getElementById('claim-ticket-selector');
             if (!sel) return;
-            const prevVal = sel.value;
-            sel.innerHTML = tickets.map(t => `<option value="${t.id}">${escapeHtml(t.name)} (${escapeHtml(t.id)})</option>`).join('');
-            if (prevVal && tickets.some(t => t.id === prevVal)) {
-                sel.value = prevVal;
-            }
+            sel.innerHTML = tickets.map((tkt, idx) => `
+                <option value="${tkt.id}">"${escapeHtml(tkt.name)}" (Ticket ${idx + 1})</option>
+            `).join('');
         }
 
-        function claimPrize(prizeName) {
-            const sel = document.getElementById('claim-ticket-selector');
-            const ticketId = sel ? sel.value : (tickets[0] && tickets[0].id);
-            if (!ticketId) {
-                showModal('⚠️', 'No Ticket Selected', 'You need at least one ticket to claim a prize.');
-                return;
-            }
-            claimPrizeForTicket(ticketId, prizeName);
-        }
-
-        async function claimPrizeForTicket(ticketId, prizeName) {
-            if (claimsStatus[prizeName]) {
-                showModal('ℹ️', 'Already Claimed', `${prizeName} has already been won by ${claimsStatus[prizeName].winnerName}!`);
-                return;
-            }
-
-            if (db && roomCode && !isOfflinePractice) {
-                try {
-                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
-                    const snap = await getDoc(roomRef);
-                    if (snap.exists()) {
-                        const roomData = snap.data();
-                        if (roomData.claims && roomData.claims[prizeName]) {
-                            claimsStatus = roomData.claims;
-                            updateAllRoomUI();
-                            showModal('ℹ️', 'Already Claimed', `${prizeName} was just claimed by ${claimsStatus[prizeName].winnerName}!`);
-                            return;
-                        }
-                    }
-                } catch (err) {
-                    console.warn("Concurrent claim check warning:", err);
-                }
-            }
-
-            const tkt = tickets.find(t => t.id === ticketId);
-            if (!tkt) return;
-
-            if (!verifyPatternOnTicket(tkt, prizeName)) {
-                showModal('❌', 'Bogey / Not Eligible Yet', `"${tkt.name}" (${tkt.id}) does not have all required called numbers for ${prizeName} yet.`);
-                return;
-            }
-
+        function verifyPatternOnTicket(tkt, prize) {
+            const grid = tkt.grid;
+            const daubed = tkt.daubed;
             const calledSet = new Set(calledNumbers);
-            for (let r = 0; r < 3; r++) {
-                for (let c = 0; c < 9; c++) {
-                    if (tkt.grid[r][c] > 0 && calledSet.has(tkt.grid[r][c])) {
-                        tkt.daubed[r][c] = true;
+
+            const isCellMarked = (r, c) => {
+                const val = grid[r][c];
+                return val > 0 && (daubed[r][c] || calledSet.has(val));
+            };
+
+            if (prize === "Early 5") {
+                let totalMarked = 0;
+                for (let r = 0; r < 3; r++) {
+                    for (let c = 0; c < 9; c++) {
+                        if (isCellMarked(r, c)) totalMarked++;
                     }
                 }
+                return totalMarked >= 5;
             }
-            saveSessionState();
 
-            const winRecord = {
+            if (prize === "Top Line") {
+                for (let c = 0; c < 9; c++) {
+                    if (grid[0][c] > 0 && !isCellMarked(0, c)) return false;
+                }
+                let rowCount = 0;
+                for (let c = 0; c < 9; c++) if (grid[0][c] > 0) rowCount++;
+                return rowCount === 5;
+            }
+
+            if (prize === "Middle Line") {
+                for (let c = 0; c < 9; c++) {
+                    if (grid[1][c] > 0 && !isCellMarked(1, c)) return false;
+                }
+                let rowCount = 0;
+                for (let c = 0; c < 9; c++) if (grid[1][c] > 0) rowCount++;
+                return rowCount === 5;
+            }
+
+            if (prize === "Bottom Line") {
+                for (let c = 0; c < 9; c++) {
+                    if (grid[2][c] > 0 && !isCellMarked(2, c)) return false;
+                }
+                let rowCount = 0;
+                for (let c = 0; c < 9; c++) if (grid[2][c] > 0) rowCount++;
+                return rowCount === 5;
+            }
+
+            if (prize === "Full House") {
+                for (let r = 0; r < 3; r++) {
+                    for (let c = 0; c < 9; c++) {
+                        if (grid[r][c] > 0 && !isCellMarked(r, c)) return false;
+                    }
+                }
+                return true;
+            }
+
+            return false;
+        }
+
+        async function claimPrize(prizeName) {
+            if (claimsStatus[prizeName]) {
+                showModal('ℹ️', 'Prize Already Claimed', `${prizeName} has already been claimed by ${claimsStatus[prizeName].winnerName}!`);
+                return;
+            }
+
+            const sel = document.getElementById('claim-ticket-selector');
+            if (!sel || tickets.length === 0) {
+                showModal('⚠️', 'No Tickets', 'You do not have any tickets to claim with.');
+                return;
+            }
+
+            const ticketId = sel.value;
+            const tkt = tickets.find(t => t.id === ticketId);
+            if (!tkt) {
+                showModal('⚠️', 'Select Ticket', 'Please select a valid ticket from your list.');
+                return;
+            }
+
+            if (restrictOnePrizePerTicket) {
+                const alreadyWon = Object.values(claimsStatus).some(claim => claim && claim.ticketId === tkt.id);
+                if (alreadyWon) {
+                    showModal('❌', 'Ticket Restricted', `This ticket ("${tkt.name}") has already won a prize and is restricted from claiming another under current room rules.`);
+                    return;
+                }
+            }
+
+            const isValid = verifyPatternOnTicket(tkt, prizeName);
+            if (!isValid) {
+                showModal('❌', 'Invalid Claim', `Your ticket "${tkt.name}" does not meet the requirements for ${prizeName} yet.`);
+                return;
+            }
+
+            claimsStatus[prizeName] = {
                 winnerName: playerName,
-                ticketId: tkt.id,
                 ticketName: tkt.name,
+                ticketId: tkt.id,
                 claimedAt: Date.now()
             };
 
-            claimsStatus[prizeName] = winRecord;
+            updateAllRoomUI();
+            showModal('🏆', 'Congratulations!', `Successfully verified and claimed ${prizeName} with "${tkt.name}"!`);
 
             if (!isOfflinePractice && db && roomCode) {
                 try {
                     const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
                     await updateDoc(roomRef, {
-                        [`claims.${prizeName}`]: winRecord
+                        claims: claimsStatus
                     });
                 } catch (err) {
-                    console.error("Failed to sync prize claim:", err);
+                    console.error("Error updating claims:", err);
                 }
             }
-
-            updateAllRoomUI();
-            showModal('🏆', `${prizeName} Winner!`, `Congratulations ${playerName}! "${tkt.name}" successfully claimed ${prizeName} first!`);
         }
 
         function updateClaimsUI() {
-            const prizeButtonMap = {
-                "Early 5": "claim-early-5",
-                "Top Line": "claim-top-line",
-                "Middle Line": "claim-middle-line",
-                "Bottom Line": "claim-bottom-line",
-                "Full House": "claim-full-house"
-            };
-
-            Object.entries(prizeButtonMap).forEach(([prize, btnId]) => {
-                const btn = document.getElementById(btnId);
-                if (!btn) return;
-                const win = claimsStatus[prize];
-                if (win) {
-                    btn.disabled = true;
-                    btn.textContent = `🏆 Won by ${win.winnerName}`;
-                    btn.className = 'w-full py-2.5 bg-emerald-900/60 border border-emerald-500/40 text-emerald-300 font-bold rounded-lg text-xs cursor-not-allowed';
-                } else {
-                    btn.disabled = false;
-                    btn.textContent = prize === 'Full House' ? 'Claim Full House 🏆' : `Claim ${prize} 🎉`;
-                    btn.className = prize === 'Full House'
-                        ? 'w-full py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-bold rounded-lg text-sm transition shadow'
-                        : 'w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg text-sm transition shadow';
-                }
-            });
-
+            const prizeOrder = ["Early 5", "Top Line", "Middle Line", "Bottom Line", "Full House"];
             const logEl = document.getElementById('claim-log');
             if (!logEl) return;
 
-            const winners = Object.entries(claimsStatus)
-                .filter(([, val]) => val !== null)
-                .sort((a, b) => (a[1].claimedAt || 0) - (b[1].claimedAt || 0));
-
-            if (winners.length === 0) {
-                logEl.innerHTML = `<p class="italic">No claims verified yet. Be the first to win!</p>`;
-            } else {
-                logEl.innerHTML = winners.map(([prize, win]) => `
-                    <div class="bg-slate-900/80 border border-emerald-500/30 rounded-xl p-3.5 flex items-center justify-between">
-                        <div>
-                            <span class="text-xs font-extrabold uppercase tracking-wider text-emerald-400">${escapeHtml(prize)}</span>
-                            <div class="text-sm font-bold text-white mt-0.5">
-                                ${escapeHtml(win.winnerName)}
-                                <span class="text-xs font-normal text-slate-400">with "${escapeHtml(win.ticketName)}"</span>
-                                ${win.ticketId ? `<span class="ml-1.5 px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-indigo-300">${escapeHtml(win.ticketId)}</span>` : ''}
+            let claimedCount = 0;
+            const logs = prizeOrder.map(prize => {
+                const claim = claimsStatus[prize];
+                const btn = document.getElementById(`claim-${prize.toLowerCase().replace(/\s+/g, '-')}`);
+                if (claim) {
+                    claimedCount++;
+                    if (btn) {
+                        btn.disabled = true;
+                        btn.className = 'w-full py-2.5 bg-emerald-900/60 text-emerald-300 border border-emerald-500/40 font-semibold rounded-lg text-sm cursor-not-allowed';
+                        btn.textContent = `Claimed by ${claim.winnerName} 🎉`;
+                    }
+                    return `
+                        <div class="bg-slate-900 border border-slate-700 rounded-xl p-3 flex justify-between items-center">
+                            <div>
+                                <span class="font-bold text-white">${escapeHtml(prize)}:</span>
+                                <span class="text-emerald-400 font-semibold ml-1">${escapeHtml(claim.winnerName)}</span>
+                                <span class="text-xs text-slate-400 ml-1">("${escapeHtml(claim.ticketName)}")</span>
                             </div>
+                            <span class="px-2 py-0.5 rounded bg-emerald-900/80 text-emerald-300 text-xs font-bold border border-emerald-500/40">Verified</span>
                         </div>
-                        <span class="text-xl">🏆</span>
-                    </div>
-                `).join('');
+                    `;
+                } else {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.className = 'w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg text-sm transition shadow';
+                        btn.textContent = `Claim ${prize} 🎉`;
+                    }
+                    return null;
+                }
+            }).filter(Boolean);
+
+            if (claimedCount === 0) {
+                logEl.innerHTML = `<p class="italic text-slate-500">No claims verified yet. Be the first to win!</p>`;
+            } else {
+                logEl.innerHTML = logs.join('');
             }
         }
 
-        async function syncPlayerMetadata() {
-            if (isOfflinePractice || !db || !roomCode || !currentUser) return;
-            try {
-                const playerRef = doc(db, 'artifacts', appId, 'public', 'data', `tambola_players_${roomCode}`, currentUser.uid);
-                await setDoc(playerRef, {
-                    uid: currentUser.uid,
-                    name: playerName,
-                    ticketCount: tickets.length,
-                    ticketNames: tickets.map(t => t.name),
-                    serializedTickets: JSON.stringify(tickets.map(t => ({ id: t.id, name: t.name, grid: t.grid, daubed: t.daubed })))
-                }, { merge: true });
-            } catch (err) {
-                console.error("Player sync error:", err);
-            }
-        }
-
-        function returnToLobbyConfirm() {
-            if (document.getElementById('section-lobby').classList.contains('hidden')) {
-                const modal = document.getElementById('custom-modal');
-                document.getElementById('modal-icon').textContent = '🚪';
-                document.getElementById('modal-title').textContent = 'Leave Current Room?';
-                document.getElementById('modal-message').textContent = 'You will return to the main lobby screen.';
-                document.getElementById('modal-actions').innerHTML = `
-                    <button onclick="closeModal()" class="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded-xl text-sm">Stay</button>
-                    <button onclick="leaveRoomToLobby()" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-xl text-sm">Leave</button>
-                `;
-                modal.classList.remove('hidden');
-            }
-        }
-
-        function leaveRoomToLobby() {
-            closeModal();
-            stopAutoPlay();
-            clearSessionState();
-            if (unsubscribeRoom) unsubscribeRoom();
-            if (unsubscribePlayers) unsubscribePlayers();
-            roomCode = null;
-            calledNumbers = [];
-            currentNumber = null;
-            tickets = [];
-
-            ['host', 'player', 'players', 'claims'].forEach(t => {
-                const sec = document.getElementById(`section-${t}`);
-                if (sec) sec.classList.add('hidden');
-            });
-            document.getElementById('nav-tabs').classList.add('hidden');
-            document.getElementById('leave-room-btn').classList.add('hidden');
-            document.getElementById('section-lobby').classList.remove('hidden');
-            document.getElementById('room-status-pill').innerHTML = `
-                <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-                <span>Lobby / Setup</span>
-            `;
-        }
-
+        // Modal Utilities
         function showModal(icon, title, message) {
             document.getElementById('modal-icon').textContent = icon;
             document.getElementById('modal-title').textContent = title;
@@ -2195,55 +2180,75 @@
             document.getElementById('custom-modal').classList.add('hidden');
         }
 
-        function escapeHtml(str) {
-            return String(str)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#039;');
+        function returnToLobbyConfirm() {
+            const modal = document.getElementById('custom-modal');
+            document.getElementById('modal-icon').textContent = '🚪';
+            document.getElementById('modal-title').textContent = 'Leave Room?';
+            document.getElementById('modal-message').textContent = 'Are you sure you want to leave the current game room?';
+            document.getElementById('modal-actions').innerHTML = `
+                <button onclick="closeModal()" class="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded-xl text-sm">Cancel</button>
+                <button onclick="closeModal(); executeLeaveRoom();" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-xl text-sm">Leave</button>
+            `;
+            modal.classList.remove('hidden');
         }
 
-        // Expose handlers globally for inline HTML onclick/onchange attributes
-        Object.assign(window, {
-            toggleHostTicketConfig,
-            createMultiplayerGame,
-            joinExistingGame,
-            switchTab,
-            drawNumber,
-            callManualNumber,
-            callSpecificNumber,
-            toggleAutoPlay,
-            updateAutoPlaySpeed,
-            repeatCall,
-            toggleAudio,
-            toggleAutoMark,
-            togglePlayerCalledBoard,
-            toggleTicketCell,
-            renameTicket,
-            clearAllDaubs,
-            claimPrize,
-            claimPrizeForTicket,
-            renderAllPlayersRosterTab,
-            copyInviteLink,
-            copyShareMessage,
-            confirmResetRoomNumbers,
-            executeResetRoom,
-            returnToLobbyConfirm,
-            leaveRoomToLobby,
-            closeModal
-        });
+        function executeLeaveRoom() {
+            stopAutoPlay();
+            if (unsubscribeRoom) unsubscribeRoom();
+            if (unsubscribePlayers) unsubscribePlayers();
+            clearSessionState();
+            roomCode = null;
+            isHost = false;
+            calledNumbers = [];
+            currentNumber = null;
+            tickets = [];
 
-        // Initialize Lobby Ticket Inputs & Check URL ?room= Param on Load
-        window.addEventListener('DOMContentLoaded', () => {
-            const params = new URLSearchParams(window.location.search);
-            const roomParam = params.get('room');
-            if (roomParam) {
-                document.getElementById('join-room-code').value = roomParam.trim().toUpperCase().slice(0, 6);
+            document.getElementById('section-lobby').classList.remove('hidden');
+            ['host', 'player', 'players', 'claims'].forEach(t => document.getElementById(`section-${t}`).classList.add('hidden'));
+            document.getElementById('nav-tabs').classList.add('hidden');
+            document.getElementById('leave-room-btn').classList.add('hidden');
+            document.getElementById('room-status-pill').innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span><span>Lobby / Setup</span>`;
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        // Global Exports & Init on Load
+        window.switchTab = switchTab;
+        window.createMultiplayerGame = createMultiplayerGame;
+        window.joinExistingGame = joinExistingGame;
+        window.toggleHostTicketConfig = toggleHostTicketConfig;
+        window.copyInviteLink = copyInviteLink;
+        window.copyShareMessage = copyShareMessage;
+        window.confirmResetRoomNumbers = confirmResetRoomNumbers;
+        window.executeResetRoom = executeResetRoom;
+        window.drawNumber = drawNumber;
+        window.callManualNumber = callManualNumber;
+        window.toggleAutoPlay = toggleAutoPlay;
+        window.updateAutoPlaySpeed = updateAutoPlaySpeed;
+        window.repeatCall = repeatCall;
+        window.toggleAudio = toggleAudio;
+        window.togglePlayerCalledBoard = togglePlayerCalledBoard;
+        window.toggleAutoMark = toggleAutoMark;
+        window.toggleHostRuleOnePrizePerTicket = toggleHostRuleOnePrizePerTicket;
+        window.clearAllDaubs = clearAllDaubs;
+        window.toggleTicketCell = toggleTicketCell;
+        window.updateTicketName = updateTicketName;
+        window.claimPrize = claimPrize;
+        window.closeModal = closeModal;
+        window.returnToLobbyConfirm = returnToLobbyConfirm;
+
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const inviteRoom = urlParams.get('room');
+            if (inviteRoom) {
+                document.getElementById('join-room-code').value = inviteRoom.toUpperCase();
+                switchTab('player');
             }
-
             attemptAutoReconnect();
-        });
+        };
     </script>
 </body>
 </html>
