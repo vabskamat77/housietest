@@ -1968,6 +1968,7 @@
             }
 
             const calledSet = new Set(calledNumbers);
+            const prizeOrder = ["Early 5", "Top Line", "Middle Line", "Bottom Line", "Full House"];
 
             container.innerHTML = tickets.map((tkt, tIdx) => {
                 let markedCount = 0;
@@ -1995,6 +1996,21 @@
                     }).join('');
                 }).join('');
 
+                // Check which prizes are eligible for this specific ticket
+                const eligiblePrizes = prizeOrder.filter(prize => !claimsStatus[prize] && verifyPatternOnTicket(tkt, prize));
+                const alreadyWonThisTicket = restrictOnePrizePerTicket && Object.values(claimsStatus).some(claim => claim && claim.ticketId === tkt.id);
+
+                const claimButtonsHtml = eligiblePrizes.length > 0 && !alreadyWonThisTicket ? `
+                    <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-700/80">
+                        <span class="text-xs font-bold text-amber-300">Eligible to Claim:</span>
+                        ${eligiblePrizes.map(p => `
+                            <button onclick="claimPrizeForTicket('${tkt.id}', '${p}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow transition animate-bounce">
+                                Claim ${p} 🎉
+                            </button>
+                        `).join('')}
+                    </div>
+                ` : (alreadyWonThisTicket ? `<div class="text-[11px] text-slate-400 italic pt-1">Ticket restricted from claiming further prizes.</div>` : '');
+
                 return `
                     <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-xl space-y-4">
                         <div class="flex flex-wrap justify-between items-center gap-2">
@@ -2010,6 +2026,7 @@
                         <div class="grid grid-cols-9 gap-1.5 sm:gap-2 bg-slate-950/60 p-3 rounded-xl border border-slate-700/80">
                             ${gridHtml}
                         </div>
+                        ${claimButtonsHtml}
                     </div>
                 `;
             }).join('');
@@ -2113,18 +2130,17 @@
         }
 
         async function claimPrize(prizeName) {
+            const sel = document.getElementById('claim-ticket-selector');
+            const ticketId = sel ? sel.value : (tickets[0] ? tickets[0].id : null);
+            await claimPrizeForTicket(ticketId, prizeName);
+        }
+
+        async function claimPrizeForTicket(ticketId, prizeName) {
             if (claimsStatus[prizeName]) {
                 showModal('ℹ️', 'Prize Already Claimed', `${prizeName} has already been claimed by ${claimsStatus[prizeName].winnerName}!`);
                 return;
             }
 
-            const sel = document.getElementById('claim-ticket-selector');
-            if (!sel || tickets.length === 0) {
-                showModal('⚠️', 'No Tickets', 'You do not have any tickets to claim with.');
-                return;
-            }
-
-            const ticketId = sel.value;
             const tkt = tickets.find(t => t.id === ticketId);
             if (!tkt) {
                 showModal('⚠️', 'Select Ticket', 'Please select a valid ticket from your list.');
@@ -2312,6 +2328,7 @@
         window.toggleTicketCell = toggleTicketCell;
         window.updateTicketName = updateTicketName;
         window.claimPrize = claimPrize;
+        window.claimPrizeForTicket = claimPrizeForTicket;
         window.closeModal = closeModal;
         window.returnToLobbyConfirm = returnToLobbyConfirm;
         window.executeLeaveRoom = executeLeaveRoom;
