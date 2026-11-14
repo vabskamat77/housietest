@@ -1184,6 +1184,27 @@
             unsubscribeRoom = onSnapshot(roomRef, (snap) => {
                 if (!snap.exists()) return;
                 const data = snap.data();
+                
+                // If room was closed by the host, kick out non-host players
+                if (data.roomClosed && !isHost) {
+                    if (unsubscribeRoom) unsubscribeRoom();
+                    if (unsubscribePlayers) unsubscribePlayers();
+                    clearSessionState();
+                    roomCode = null;
+                    calledNumbers = [];
+                    currentNumber = null;
+                    tickets = [];
+
+                    document.getElementById('section-lobby').classList.remove('hidden');
+                    ['host', 'player', 'players', 'claims'].forEach(t => document.getElementById(`section-${t}`).classList.add('hidden'));
+                    document.getElementById('nav-tabs').classList.add('hidden');
+                    document.getElementById('leave-room-btn').classList.add('hidden');
+                    document.getElementById('room-status-pill').innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span><span>Lobby / Setup</span>`;
+                    
+                    showModal('🚪', 'Host Left Room', 'The host has ended the game and closed the room.');
+                    return;
+                }
+
                 const prevCurrent = currentNumber;
                 calledNumbers = data.calledNumbers || [];
                 currentNumber = data.currentNumber || null;
@@ -2183,17 +2204,31 @@
         function returnToLobbyConfirm() {
             const modal = document.getElementById('custom-modal');
             document.getElementById('modal-icon').textContent = '🚪';
-            document.getElementById('modal-title').textContent = 'Leave Room?';
-            document.getElementById('modal-message').textContent = 'Are you sure you want to leave the current game room?';
+            document.getElementById('modal-title').textContent = isHost ? 'End Game & Kick All Players?' : 'Leave Room?';
+            document.getElementById('modal-message').textContent = isHost 
+                ? 'As the host, leaving will end the game and kick all connected players back to the lobby.' 
+                : 'Are you sure you want to leave the current game room?';
             document.getElementById('modal-actions').innerHTML = `
                 <button onclick="closeModal()" class="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded-xl text-sm">Cancel</button>
-                <button onclick="closeModal(); executeLeaveRoom();" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-xl text-sm">Leave</button>
+                <button onclick="closeModal(); executeLeaveRoom();" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-xl text-sm">${isHost ? 'End & Kick All' : 'Leave'}</button>
             `;
             modal.classList.remove('hidden');
         }
 
-        function executeLeaveRoom() {
+        async function executeLeaveRoom() {
             stopAutoPlay();
+            if (isHost && !isOfflinePractice && db && roomCode) {
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                    await updateDoc(roomRef, {
+                        roomClosed: true,
+                        closedAt: Date.now()
+                    });
+                } catch (err) {
+                    console.error("Error closing room on host leave:", err);
+                }
+            }
+
             if (unsubscribeRoom) unsubscribeRoom();
             if (unsubscribePlayers) unsubscribePlayers();
             clearSessionState();
@@ -2239,6 +2274,7 @@
         window.claimPrize = claimPrize;
         window.closeModal = closeModal;
         window.returnToLobbyConfirm = returnToLobbyConfirm;
+        window.executeLeaveRoom = executeLeaveRoom;
 
         window.onload = function() {
             const urlParams = new URLSearchParams(window.location.search);
