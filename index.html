@@ -746,6 +746,18 @@
         let unsubscribePlayers = null;
         let roomRoster = [];
 
+        let hostingTokensDB = JSON.parse(localStorage.getItem('tambola_hosting_tokens_v2') || JSON.stringify([
+            { token: "HOST-2026-FP10", maxTickets: 10, singleUse: false, usedCount: 0, active: true, createdAt: Date.now() },
+            { token: "HOST-2026-LIVE", maxTickets: 50, singleUse: false, usedCount: 0, active: true, createdAt: Date.now() },
+            { token: "HOST-VIP-001", maxTickets: 100, singleUse: true, usedCount: 0, active: true, createdAt: Date.now() }
+        ]));
+
+        function saveHostingTokensDB() {
+            try {
+                localStorage.setItem('tambola_hosting_tokens_v2', JSON.stringify(hostingTokensDB));
+            } catch (e) {}
+        }
+
         function getAllParticipantsList(roster) {
             return (roster || []).filter(p => p && p.left !== true);
         }
@@ -989,7 +1001,19 @@
                 return;
             }
 
-            maxRoomTickets = 50;
+            const tokenObj = hostingTokensDB.find(t => t.token === tokenInput);
+            if (!tokenObj || !tokenObj.active) {
+                showModal('❌', 'Invalid or Inactive Token', 'The host token entered is invalid, inactive, or has not been activated in the system.');
+                return;
+            }
+
+            maxRoomTickets = tokenObj.maxTickets || 50;
+            tokenObj.usedCount = (tokenObj.usedCount || 0) + 1;
+            if (tokenObj.singleUse) {
+                tokenObj.active = false;
+            }
+            saveHostingTokensDB();
+
             isHost = true;
             playerName = "Host";
             roomCode = generateRoomCode();
