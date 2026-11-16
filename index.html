@@ -2237,9 +2237,9 @@
                 if (calledNumbers.length === 0) {
                     recentStrip.innerHTML = `<span class="text-xs text-slate-500 italic px-2">No numbers called yet...</span>`;
                 } else {
-                    const last10 = [...calledNumbers].reverse().slice(0, 10);
-                    recentStrip.innerHTML = last10.map((num, idx) => `
-                        <div class="flex-shrink-0 w-11 h-11 rounded-xl ${idx === 0 ? 'bg-amber-500 text-slate-950 font-black ring-2 ring-white/50' : 'bg-slate-900 text-emerald-400 border border-slate-700 font-bold'} flex items-center justify-center text-sm shadow">
+                    const allCalledReverse = [...calledNumbers].reverse();
+                    recentStrip.innerHTML = allCalledReverse.map((num, idx) => `
+                        <div class="flex-shrink-0 w-9 h-9 rounded-xl ${idx === 0 ? 'bg-amber-500 text-slate-950 font-black ring-2 ring-white/50' : 'bg-slate-900 text-emerald-400 border border-slate-700 font-bold'} flex items-center justify-center text-xs shadow">
                             ${num}
                         </div>
                     `).join('');
