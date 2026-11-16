@@ -460,7 +460,7 @@
                         <span class="text-xs font-bold text-slate-300">Complete 1–90 Called Numbers Board</span>
                         <span class="text-[11px] text-emerald-400">Green = Already Called</span>
                     </div>
-                    <div id="player-mini-board" class="grid grid-cols-10 sm:grid-cols-15 gap-1">
+                    <div id="player-mini-board" class="grid grid-cols-10 gap-1 max-w-2xl mx-auto">
                         <!-- 1-90 mini cells injected here -->
                     </div>
                 </div>
@@ -2557,9 +2557,13 @@
                 const cell = document.getElementById(`player-mini-cell-${i}`);
                 if (!cell) continue;
                 if (calledSet.has(i)) {
-                    cell.className = "aspect-square rounded text-[9px] font-bold bg-emerald-600 text-white flex items-center justify-center";
+                    if (i === currentNumber) {
+                        cell.className = "board-number aspect-square rounded-sm bg-gradient-to-tr from-amber-500 to-orange-600 text-white border border-white flex items-center justify-center font-black text-[10px] sm:text-[11px] shadow-sm animate-pulse select-none";
+                    } else {
+                        cell.className = "board-number aspect-square rounded-sm bg-emerald-600 text-white border border-emerald-400 flex items-center justify-center font-bold text-[10px] sm:text-[11px] select-none";
+                    }
                 } else {
-                    cell.className = "aspect-square rounded text-[9px] font-medium bg-slate-900 text-slate-500 border border-slate-800 flex items-center justify-center";
+                    cell.className = "board-number aspect-square rounded-sm bg-slate-900 border border-slate-700/80 flex items-center justify-center font-bold text-[10px] sm:text-[11px] text-slate-400 select-none";
                 }
             }
         }
@@ -2569,7 +2573,7 @@
             if (!board) return;
             let html = '';
             for (let i = 1; i <= 90; i++) {
-                html += `<div id="player-mini-cell-${i}" class="aspect-square rounded text-[9px] font-medium bg-slate-900 text-slate-500 border border-slate-800 flex items-center justify-center">${i}</div>`;
+                html += `<div id="player-mini-cell-${i}" class="board-number aspect-square rounded-sm bg-slate-900 border border-slate-700/80 flex items-center justify-center font-bold text-[10px] sm:text-[11px] text-slate-400 select-none">${i}</div>`;
             }
             board.innerHTML = html;
         }
