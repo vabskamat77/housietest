@@ -267,7 +267,7 @@
                     <div>
                         <div class="flex justify-between items-center mb-3">
                             <h2 class="text-base sm:text-lg font-bold text-white flex items-center space-x-2">
-                                <span>📊 Recent Called Numbers</span>
+                                <span>📊 Recent Called Numbers (Last 50)</span>
                             </h2>
                             <span id="total-called-count" class="text-xs text-slate-300 bg-slate-900 px-3 py-1 rounded-lg border border-slate-700">Called: 0 / 90</span>
                         </div>
@@ -2237,7 +2237,7 @@
                 if (calledNumbers.length === 0) {
                     recentStrip.innerHTML = `<span class="text-xs text-slate-500 italic px-2">No numbers called yet...</span>`;
                 } else {
-                    const allCalledReverse = [...calledNumbers].reverse();
+                    const allCalledReverse = [...calledNumbers].reverse().slice(0, 50);
                     recentStrip.innerHTML = allCalledReverse.map((num, idx) => `
                         <div class="flex-shrink-0 w-9 h-9 rounded-xl ${idx === 0 ? 'bg-amber-500 text-slate-950 font-black ring-2 ring-white/50' : 'bg-slate-900 text-emerald-400 border border-slate-700 font-bold'} flex items-center justify-center text-xs shadow">
                             ${num}
