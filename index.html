@@ -683,6 +683,8 @@
         let unsubscribeToken = null;
         let statusMonitorInterval = null;
         let activeHostTokenCode = null;
+        let activeHostTokenDocRef = null;
+        let activeHostTokenIsSingleUse = false;
         let roomRoster = [];
 
         let hostingTokensDB = JSON.parse(localStorage.getItem('tambola_hosting_tokens_v2') || JSON.stringify([
@@ -941,6 +943,8 @@
             }
 
             let validTokenData = null;
+            let isSingleUseToken = false;
+            const newRoomCode = generateRoomCode();
 
             if (db) {
                 const candidatePaths = [
@@ -950,17 +954,50 @@
                 ];
                 for (const pathSegments of candidatePaths) {
                     try {
-                        const tSnap = await getDoc(doc(db, ...pathSegments));
+                        const tRef = doc(db, ...pathSegments);
+                        const tSnap = await getDoc(tRef);
                         if (tSnap.exists()) {
                             const data = tSnap.data();
                             if (isTokenDocInactive(data)) {
                                 showModal('❌', 'Inactive Host Token', 'This host token is inactive or expired.');
                                 return;
                             }
+
+                            isSingleUseToken = Boolean(data.singleUse);
+
+                            if (isSingleUseToken) {
+                                // Check if token document already tracks an active party
+                                if (data.activeRoomCode) {
+                                    try {
+                                        const existingRoomSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', data.activeRoomCode));
+                                        if (existingRoomSnap.exists() && !isPartyDocInactive(existingRoomSnap.data())) {
+                                            showModal('⚠️', 'Single-Use Token In Use', `This single-use token is already hosting an active party (${data.activeRoomCode}). Only one party can be hosted at a time with this token.`);
+                                            return;
+                                        }
+                                    } catch (e) {}
+                                }
+
+                                // Also scan active rooms collection to guarantee no concurrent active party uses this single-use token
+                                try {
+                                    const roomsSnap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms'));
+                                    let activeConcurrentRoom = null;
+                                    roomsSnap.forEach(rDoc => {
+                                        const rData = rDoc.data();
+                                        if (rData && (rData.hostToken || '').trim().toUpperCase() === tokenInput && !isPartyDocInactive(rData)) {
+                                            activeConcurrentRoom = rData.roomCode || rDoc.id;
+                                        }
+                                    });
+                                    if (activeConcurrentRoom) {
+                                        showModal('⚠️', 'Single-Use Token In Use', `This single-use token is already hosting an active party (${activeConcurrentRoom}). Only one party can be hosted at a time with this token.`);
+                                        return;
+                                    }
+                                } catch (e) {}
+                            }
+
                             validTokenData = {
                                 maxTickets: data.maxTickets || 50,
-                                singleUse: Boolean(data.singleUse),
-                                ref: doc(db, ...pathSegments),
+                                singleUse: isSingleUseToken,
+                                ref: tRef,
                                 usedCount: data.usedCount || 0
                             };
                             break;
@@ -975,10 +1012,29 @@
                     showModal('❌', 'Invalid or Inactive Token', 'The host token entered is invalid, inactive, or has not been activated in the system.');
                     return;
                 }
+                isSingleUseToken = Boolean(localTokenObj.singleUse);
+
+                if (isSingleUseToken && db) {
+                    try {
+                        const roomsSnap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms'));
+                        let activeConcurrentRoom = null;
+                        roomsSnap.forEach(rDoc => {
+                            const rData = rDoc.data();
+                            if (rData && (rData.hostToken || '').trim().toUpperCase() === tokenInput && !isPartyDocInactive(rData)) {
+                                activeConcurrentRoom = rData.roomCode || rDoc.id;
+                            }
+                        });
+                        if (activeConcurrentRoom) {
+                            showModal('⚠️', 'Single-Use Token In Use', `This single-use token is already hosting an active party (${activeConcurrentRoom}). Only one party can be hosted at a time with this token.`);
+                            return;
+                        }
+                    } catch (e) {}
+                }
+
                 maxRoomTickets = localTokenObj.maxTickets || 50;
                 localTokenObj.usedCount = (localTokenObj.usedCount || 0) + 1;
                 if (localTokenObj.singleUse) {
-                    localTokenObj.active = false;
+                    localTokenObj.activeRoomCode = newRoomCode;
                 }
                 saveHostingTokensDB();
             } else {
@@ -986,7 +1042,11 @@
                 if (validTokenData.ref) {
                     try {
                         const updates = { usedCount: validTokenData.usedCount + 1 };
-                        if (validTokenData.singleUse) updates.active = false;
+                        if (validTokenData.singleUse) {
+                            // Keep token active while this single party is live, locking it to newRoomCode
+                            updates.activeRoomCode = newRoomCode;
+                            updates.inUse = true;
+                        }
                         await updateDoc(validTokenData.ref, updates);
                     } catch (e) {}
                 }
@@ -994,8 +1054,10 @@
 
             isHost = true;
             playerName = "Host";
-            roomCode = generateRoomCode();
+            roomCode = newRoomCode;
             activeHostTokenCode = tokenInput;
+            activeHostTokenDocRef = validTokenData ? validTokenData.ref : null;
+            activeHostTokenIsSingleUse = isSingleUseToken;
             roomRoster = [];
             tickets = [];
 
@@ -1371,12 +1433,31 @@
                         hostToken: null
                     }).catch(() => {});
                 } catch (e) {}
+
+                if (activeHostTokenIsSingleUse) {
+                    if (activeHostTokenDocRef) {
+                        updateDoc(activeHostTokenDocRef, {
+                            active: false,
+                            status: 'inactive',
+                            inUse: false,
+                            activeRoomCode: null
+                        }).catch(() => {});
+                    }
+                    const localTok = hostingTokensDB.find(t => t.token === activeHostTokenCode);
+                    if (localTok) {
+                        localTok.active = false;
+                        localTok.activeRoomCode = null;
+                        saveHostingTokensDB();
+                    }
+                }
             }
 
             clearSessionState();
             roomCode = null;
             isHost = false;
             activeHostTokenCode = null;
+            activeHostTokenDocRef = null;
+            activeHostTokenIsSingleUse = false;
             calledNumbers = [];
             currentNumber = null;
             tickets = [];
@@ -2092,6 +2173,25 @@
                 } catch (e) {
                     console.error("Error closing Party on leave:", e);
                 }
+
+                if (activeHostTokenIsSingleUse) {
+                    if (activeHostTokenDocRef) {
+                        try {
+                            await updateDoc(activeHostTokenDocRef, {
+                                active: false,
+                                status: 'inactive',
+                                inUse: false,
+                                activeRoomCode: null
+                            });
+                        } catch (e) {}
+                    }
+                    const localTok = hostingTokensDB.find(t => t.token === activeHostTokenCode);
+                    if (localTok) {
+                        localTok.active = false;
+                        localTok.activeRoomCode = null;
+                        saveHostingTokensDB();
+                    }
+                }
             }
 
             if (!isHost && db && roomCode && currentUser) {
@@ -2107,6 +2207,8 @@
             roomCode = null;
             isHost = false;
             activeHostTokenCode = null;
+            activeHostTokenDocRef = null;
+            activeHostTokenIsSingleUse = false;
             calledNumbers = [];
             currentNumber = null;
             tickets = [];
