@@ -937,33 +937,109 @@
                 return;
             }
 
-            const tokenObj = hostingTokensDB.find(t => t.token === tokenInput);
-            if (!tokenObj || !tokenObj.active) {
-                showModal('❌', 'Invalid or Inactive Token', 'The host token entered is invalid, inactive, or has not been activated in the system.');
-                return;
-            }
+            const btn = document.getElementById('btn-create-room');
+            btn.disabled = true;
+            btn.innerHTML = '<span>⏳ Validating Token...</span>';
 
-            maxRoomTickets = tokenObj.maxTickets || 50;
-            tokenObj.usedCount = (tokenObj.usedCount || 0) + 1;
-            if (tokenObj.singleUse) {
-                tokenObj.active = false;
-            }
-            saveHostingTokensDB();
+            try {
+                let validTokenData = null;
+                let firestoreTokenRef = null;
+                const localTokenObj = hostingTokensDB.find(t => t.token === tokenInput);
 
-            isHost = true;
-            playerName = "Host";
-            roomCode = generateRoomCode();
-            roomRoster = [];
-            tickets = [];
+                if (db) {
+                    await ensureAuth();
+                    const candidatePaths = [
+                        ['artifacts', appId, 'public', 'data', 'tambola_tokens', tokenInput],
+                        ['artifacts', appId, 'public', 'data', 'tambola_hosting_tokens', tokenInput],
+                        ['artifacts', appId, 'public', 'data', 'hosting_tokens', tokenInput]
+                    ];
 
-            saveSessionState();
+                    for (const pathSegments of candidatePaths) {
+                        try {
+                            const ref = doc(db, ...pathSegments);
+                            const snap = await getDoc(ref);
+                            if (snap.exists()) {
+                                validTokenData = snap.data();
+                                firestoreTokenRef = ref;
+                                break;
+                            }
+                        } catch (e) {
+                            console.warn('Token lookup path skipped:', pathSegments.join('/'), e);
+                        }
+                    }
+                }
 
-            if (db) {
-                const btn = document.getElementById('btn-create-room');
-                try {
-                    btn.disabled = true;
+                // Fall back to local token registry if not overridden by a Firestore token doc
+                if (!validTokenData && localTokenObj) {
+                    validTokenData = localTokenObj;
+                }
+
+                if (!validTokenData) {
+                    showModal('❌', 'Invalid Host Token', `The host token "${tokenInput}" was not found. Please check your token and try again.`);
+                    return;
+                }
+
+                // Strictly verify active flag and status
+                const isExplicitlyInactive = validTokenData.active === false || (typeof validTokenData.status === 'string' && validTokenData.status.toLowerCase() !== 'active');
+                if (isExplicitlyInactive) {
+                    showModal('🚫', 'Inactive Host Token', `The host token "${tokenInput}" is currently inactive or disabled and cannot be used to host a party.`);
+                    return;
+                }
+
+                // Verify expiration if present
+                if (validTokenData.expiresAt && Number(validTokenData.expiresAt) < Date.now()) {
+                    showModal('⌛', 'Expired Host Token', `The host token "${tokenInput}" has expired.`);
+                    return;
+                }
+
+                // Verify single-use and maxUses constraints
+                const currentUsedCount = Number(validTokenData.usedCount || 0);
+                if (validTokenData.singleUse && currentUsedCount >= 1) {
+                    showModal('🚫', 'Token Already Used', `The single-use host token "${tokenInput}" has already been redeemed.`);
+                    return;
+                }
+                if (validTokenData.maxUses && currentUsedCount >= Number(validTokenData.maxUses)) {
+                    showModal('🚫', 'Token Usage Limit Reached', `The host token "${tokenInput}" has reached its maximum number of uses.`);
+                    return;
+                }
+
+                // Token is active and valid — update usage state cleanly
+                maxRoomTickets = Number(validTokenData.maxTickets) || 50;
+                const nextUsedCount = currentUsedCount + 1;
+                const shouldDeactivate = Boolean(validTokenData.singleUse) || (validTokenData.maxUses && nextUsedCount >= Number(validTokenData.maxUses));
+
+                if (firestoreTokenRef) {
+                    try {
+                        await updateDoc(firestoreTokenRef, {
+                            usedCount: nextUsedCount,
+                            active: !shouldDeactivate,
+                            status: shouldDeactivate ? 'inactive' : 'active',
+                            lastUsedAt: Date.now()
+                        });
+                    } catch (e) {
+                        console.warn('Could not update Firestore token usage state:', e);
+                    }
+                }
+
+                if (localTokenObj) {
+                    localTokenObj.usedCount = nextUsedCount;
+                    if (shouldDeactivate) {
+                        localTokenObj.active = false;
+                        localTokenObj.status = 'inactive';
+                    }
+                    saveHostingTokensDB();
+                }
+
+                isHost = true;
+                playerName = "Host";
+                roomCode = generateRoomCode();
+                roomRoster = [];
+                tickets = [];
+
+                saveSessionState();
+
+                if (db) {
                     btn.innerHTML = '<span>⏳ Creating Live Party...</span>';
-
                     const user = await ensureAuth();
                     const hostUid = (user && user.uid) ? user.uid : getOrCreateFallbackUid('host');
 
@@ -991,17 +1067,17 @@
                     });
 
                     subscribeToRoom(roomCode);
-                } catch (err) {
-                    console.error("Failed to create multiplayer Party:", err);
-                    showModal('⚠️', 'Multiplayer Sync Issue', `Could not connect to the live server (${err.message || 'Network/Storage blocked'}).`);
-                } finally {
-                    btn.disabled = false;
-                    btn.innerHTML = '<span>🚀 Start Hosting</span>';
                 }
-            }
 
-            enterGameRoomUI();
-            showModal('🎉', 'Party Successfully Created!', `Your new party has been successfully created!\nParty Code: ${roomCode}`);
+                enterGameRoomUI();
+                showModal('🎉', 'Party Successfully Created!', `Your new party has been successfully created!\nParty Code: ${roomCode}\nMax Tickets Allowed: ${maxRoomTickets}`);
+            } catch (err) {
+                console.error("Failed to create multiplayer Party:", err);
+                showModal('⚠️', 'Hosting Error', `Could not start hosting (${err.message || 'Please check your connection and try again'}).`);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span>🚀 Start Hosting</span>';
+            }
         }
 
         async function joinExistingGame() {
@@ -1033,16 +1109,12 @@
 
                 if (!snap.exists()) {
                     showModal('❌', 'Party Not Found', `No active game found with code "${codeInput}". Double-check with your host.`);
-                    btn.disabled = false;
-                    btn.innerHTML = '<span>🎯 Join Live Game</span>';
                     return;
                 }
 
                 const roomData = snap.data();
                 if (roomData.roomClosed) {
                     showModal('🚫', 'Party Permanently Closed', `Party "${codeInput}" has been ended and permanently closed by the host. It cannot be retrieved or rejoined.`);
-                    btn.disabled = false;
-                    btn.innerHTML = '<span>🎯 Join Live Game</span>';
                     return;
                 }
 
@@ -1053,8 +1125,6 @@
 
                 if (roomData.lockRoomNewPlayers && !isExistingHost) {
                     showModal('🔒', 'Party Locked', 'The host has locked this Party and is not allowing new players to join.');
-                    btn.disabled = false;
-                    btn.innerHTML = '<span>🎯 Join Live Game</span>';
                     return;
                 }
 
@@ -1100,8 +1170,6 @@
 
                 if (currentTotalTickets + ticketCountInput > maxRoomTickets) {
                     showModal('⚠️', 'Ticket Capacity Reached', `This Party has a maximum capacity of ${maxRoomTickets} tickets. Joining would exceed the limit (${currentTotalTickets} already taken).`);
-                    btn.disabled = false;
-                    btn.innerHTML = '<span>🎯 Join Live Game</span>';
                     return;
                 }
 
@@ -1141,6 +1209,9 @@
                 if (roomData.restrictOnePrizePerTicket !== undefined) {
                     restrictOnePrizePerTicket = roomData.restrictOnePrizePerTicket;
                 }
+                if (roomData.allowMultiTickets !== undefined) {
+                    allowMultiTickets = roomData.allowMultiTickets;
+                }
                 if (roomData.lockRoomNewPlayers !== undefined) {
                     lockRoomNewPlayers = roomData.lockRoomNewPlayers;
                 }
@@ -1152,7 +1223,7 @@
                 showModal('❌', 'Join Failed', 'Unable to join Party right now. Please try again.');
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = '<span>🎯 Join Live Game</span>';
+                btn.innerHTML = '<span>🎯 Join Live party</span>';
             }
         }
 
