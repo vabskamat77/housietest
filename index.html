@@ -1243,6 +1243,7 @@
                         roomCode: roomCode,
                         hostId: hostUid,
                         hostName: playerName,
+                        hostToken: tokenInput,
                         maxRoomTickets: maxRoomTickets,
                         calledNumbers: [],
                         currentNumber: null,
@@ -1308,15 +1309,53 @@
                 }
 
                 const roomData = snap.data();
+                if (roomData.roomClosed) {
+                    showModal('🚫', 'Room Permanently Closed', `Room "${codeInput}" has been ended and permanently closed by the host. It cannot be retrieved or rejoined.`);
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>🎯 Join Live Game</span>';
+                    return;
+                }
+
                 maxRoomTickets = roomData.maxRoomTickets || 50;
 
-                const isMatchingHostName = roomData.hostName && roomData.hostName.trim().toLowerCase() === playerNameInput.toLowerCase();
-                const isExistingHost = (user && roomData.hostId === user.uid) || isMatchingHostName;
+                const isMatchingHostToken = roomData.hostToken && roomData.hostToken.trim().toUpperCase() === playerNameInput.toUpperCase();
+                const isExistingHost = (user && roomData.hostId === user.uid) || Boolean(isMatchingHostToken);
 
                 if (roomData.lockRoomNewPlayers && !isExistingHost) {
                     showModal('🔒', 'Room Locked', 'The host has locked this room and is not allowing new players to join.');
                     btn.disabled = false;
                     btn.innerHTML = '<span>🎯 Join Live Game</span>';
+                    return;
+                }
+
+                // If re-joining as the authenticated host, restore Host Board directly without creating a player ticket
+                if (isExistingHost) {
+                    roomCode = codeInput;
+                    isHost = true;
+                    playerName = roomData.hostName || "Host";
+                    tickets = [];
+
+                    saveSessionState();
+
+                    calledNumbers = roomData.calledNumbers || [];
+                    currentNumber = roomData.currentNumber || null;
+                    claimsStatus = roomData.claims || claimsStatus;
+                    if (roomData.prizesEnabled) {
+                        prizesEnabled = roomData.prizesEnabled;
+                    }
+                    if (roomData.restrictOnePrizePerTicket !== undefined) {
+                        restrictOnePrizePerTicket = roomData.restrictOnePrizePerTicket;
+                    }
+                    if (roomData.allowMultiTickets !== undefined) {
+                        allowMultiTickets = roomData.allowMultiTickets;
+                    }
+                    if (roomData.lockRoomNewPlayers !== undefined) {
+                        lockRoomNewPlayers = roomData.lockRoomNewPlayers;
+                    }
+
+                    subscribeToRoom(roomCode);
+                    enterGameRoomUI();
+                    showModal('🎙️', 'Host Re-joined', `Welcome back! You have securely re-joined room ${roomCode} as the Host.`);
                     return;
                 }
 
@@ -1340,12 +1379,7 @@
 
                 roomCode = codeInput;
                 playerName = playerNameInput;
-
-                if (isExistingHost) {
-                    isHost = true;
-                } else {
-                    isHost = false;
-                }
+                isHost = false;
 
                 tickets = [];
                 for (let i = 0; i < ticketCountInput; i++) {
@@ -2075,13 +2109,13 @@
         function returnToLobbyConfirm() {
             const modal = document.getElementById('custom-modal');
             document.getElementById('modal-icon').textContent = '🚪';
-            document.getElementById('modal-title').textContent = isHost ? 'End Room for Everyone?' : 'Leave Room?';
+            document.getElementById('modal-title').textContent = isHost ? 'End & Permanently Close Room?' : 'Leave Room?';
             document.getElementById('modal-message').textContent = isHost
-                ? 'As the host, leaving the room will kick out all connected players and close room details.'
+                ? 'Ending the room will permanently close it and remove all players. Once you leave, this room cannot be retrieved or reopened.'
                 : 'Are you sure you want to leave this room?';
             document.getElementById('modal-actions').innerHTML = `
                 <button onclick="closeModal()" class="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded-xl text-sm">Stay</button>
-                <button onclick="closeModal(); executeLeaveRoom();" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-xl text-sm">Leave</button>
+                <button onclick="closeModal(); executeLeaveRoom();" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-xl text-sm">${isHost ? 'End Room Permanently' : 'Leave'}</button>
             `;
             modal.classList.remove('hidden');
         }
@@ -2090,10 +2124,15 @@
             if (unsubscribeRoom) unsubscribeRoom();
             if (unsubscribePlayers) unsubscribePlayers();
 
+            const wasHost = isHost;
             if (isHost && db && roomCode) {
                 try {
                     const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
-                    await updateDoc(roomRef, { roomClosed: true });
+                    await updateDoc(roomRef, {
+                        roomClosed: true,
+                        closedAt: Date.now(),
+                        hostToken: null
+                    });
                 } catch (e) {
                     console.error("Error closing room on leave:", e);
                 }
@@ -2129,7 +2168,10 @@
             }
 
             document.getElementById('section-lobby').classList.remove('hidden');
-            ['host', 'player', 'players', 'claims'].forEach(t => document.getElementById(`section-${t}`).classList.add('hidden'));
+            ['host', 'board', 'player', 'players', 'prizex', 'claims'].forEach(t => {
+                const sec = document.getElementById(`section-${t}`);
+                if (sec) sec.classList.add('hidden');
+            });
             document.getElementById('nav-tabs').classList.add('hidden');
             document.getElementById('leave-room-btn').classList.add('hidden');
             
@@ -2146,7 +2188,13 @@
                 }
             } catch (e) {}
 
-            showModal('👋', 'Left Room', 'All room data and session details have been refreshed and cleared.');
+            showModal(
+                '👋',
+                wasHost ? 'Room Permanently Closed' : 'Left Room',
+                wasHost
+                    ? 'The room has been ended and permanently closed for everyone. It can no longer be retrieved.'
+                    : 'All room data and session details have been refreshed and cleared.'
+            );
         }
 
         window.executeLeaveRoom = executeLeaveRoom;
