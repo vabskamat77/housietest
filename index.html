@@ -833,6 +833,7 @@
                 singleUse: true,
                 usedCount: 0,
                 active: true,
+                status: 'active',
                 buyerName: buyerInfo.fullName || '',
                 buyerEmail: buyerInfo.email || '',
                 paymentMethod: buyerInfo.paymentMethod || '',
@@ -845,20 +846,7 @@
             if (db) {
                 try {
                     const tRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_tokens', generatedToken);
-                    await setDoc(tRef, {
-                        token: generatedToken,
-                        tier: tierName,
-                        maxTickets: ticketCount,
-                        singleUse: true,
-                        usedCount: 0,
-                        active: true,
-                        status: 'active',
-                        price: priceStr,
-                        buyerName: buyerInfo.fullName || '',
-                        buyerEmail: buyerInfo.email || '',
-                        paymentMethod: buyerInfo.paymentMethod || '',
-                        createdAt: Date.now()
-                    });
+                    await setDoc(tRef, newTokenObj);
                 } catch (e) {
                     console.warn("Token cloud save warning:", e);
                 }
@@ -872,7 +860,7 @@
             showModal(
                 '✅',
                 `${tierName} Package Activated!`,
-                `Thank you, ${buyerInfo.fullName || 'Host'}! Payment via ${buyerInfo.paymentMethod || 'Card'} succeeded. Your single-use Host Token (${generatedToken}) for up to ${ticketCount} tickets has been sent to ${buyerInfo.email || 'your email'} and filled into the Host Token field.`
+                `Thank you, ${buyerInfo.fullName || 'Host'}! Payment via ${buyerInfo.paymentMethod || 'Card'} succeeded. Your single-use Host Token (${generatedToken}) for up to ${ticketCount} tickets has been instantly activated in Firestore and filled into the Host Token field.`
             );
         }
 
