@@ -76,8 +76,12 @@
                 </button>
             </div>
 
-            <!-- Global Controls -->
-            <div class="flex items-center space-x-2">
+            <!-- Global Controls & Active Host Token on Right -->
+            <div class="flex items-center space-x-3">
+                <div id="header-host-token-badge" class="hidden bg-slate-900 border border-amber-500/40 px-3 py-1.5 rounded-xl text-xs font-mono font-bold text-amber-400 shadow flex items-center gap-1.5">
+                    <span>👑</span>
+                    <span id="header-token-text">TOKEN: --</span>
+                </div>
                 <button onclick="toggleAudio()" id="audio-btn" class="hidden p-2 sm:p-2.5 bg-slate-700 hover:bg-slate-600 rounded-xl text-slate-200 transition text-sm flex items-center space-x-1" title="Toggle Voice Callout">
                     <span id="audio-icon">🔇</span>
                     <span class="hidden sm:inline text-xs font-medium">Sound</span>
@@ -180,9 +184,15 @@
             <!-- Share & Party Info Banner -->
             <div id="host-share-banner" class="bg-gradient-to-r from-slate-800 via-slate-800 to-emerald-950/50 border border-emerald-500/30 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                 <div class="flex flex-wrap items-center gap-4">
-                    <div class="bg-slate-900 border border-emerald-500/40 px-4 py-2.5 rounded-xl">
-                        <div class="text-[10px] uppercase tracking-wider text-emerald-400 font-bold">Party Code</div>
+                    <!-- Party Code Box -->
+                    <div class="bg-slate-900 border border-emerald-500/40 px-4 py-2.5 rounded-xl space-y-0.5">
+                        <span class="text-[10px] uppercase tracking-wider text-emerald-400 font-bold block">Party Code</span>
                         <div id="display-room-code" class="text-2xl sm:text-3xl font-black tracking-widest text-amber-400 select-all">------</div>
+                    </div>
+                    <!-- Ticket Capacity Metric Outside Box -->
+                    <div class="bg-slate-900/80 border border-slate-700 px-4 py-2.5 rounded-xl space-y-0.5">
+                        <span class="text-[10px] uppercase tracking-wider text-slate-400 font-bold block">Ticket Capacity</span>
+                        <div id="display-ticket-usage" class="text-lg sm:text-xl font-extrabold text-slate-200">0 / 50</div>
                     </div>
                     <div>
                         <h3 class="text-sm sm:text-base font-bold text-white">Invite Players to Join</h3>
@@ -271,6 +281,7 @@
                             </h2>
                             <span id="total-called-count" class="text-xs text-slate-300 bg-slate-900 px-3 py-1 rounded-lg border border-slate-700">Called: 0 / 90</span>
                         </div>
+                        <!-- Compact circles with flex-wrap -->
                         <div id="recent-numbers-strip" class="flex flex-wrap gap-2 py-2 max-h-40 overflow-y-auto items-center">
                             <span class="text-xs text-slate-500 italic px-2">No numbers called yet...</span>
                         </div>
@@ -341,7 +352,7 @@
                         </button>
                     </div>
                     <div class="flex items-center justify-between gap-3 bg-slate-900 px-4 py-3 rounded-xl border border-slate-700">
-                        <span class="text-xs font-bold text-slate-200">Allow multiple tickets per player (up to 4 max)</span>
+                        <span class="text-xs font-bold text-slate-200">Allow multiple tickets per player (up to 5 max)</span>
                         <button type="button" id="host-rule-multi-tickets-btn" onclick="toggleHostRuleMultiTickets()" role="switch" aria-checked="false" class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-slate-700 transition-colors duration-200 ease-in-out focus:outline-none">
                             <span id="host-rule-multi-tickets-knob" class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0"></span>
                         </button>
@@ -460,11 +471,11 @@
             <div class="bg-slate-800 border border-slate-700 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-wrap justify-between items-center gap-3">
                 <div>
                     <h2 class="text-lg font-bold text-white">Your Playing Tickets (<span id="player-tickets-header-count">0</span>)</h2>
-                    <p class="text-xs text-slate-400">Rename any ticket by clicking its title. Ticket count is locked once you join the Party.</p>
+                    <p class="text-xs text-slate-400">Rename any ticket by clicking its title. Up to 5 tickets allowed.</p>
                 </div>
                 <div class="flex items-center space-x-2.5">
                     <button id="add-ticket-btn" onclick="addNewPlayerTicket()" class="hidden px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold rounded-xl transition shadow">
-                        ➕ Add Ticket (Max 4)
+                        ➕ Add Ticket (Max 5)
                     </button>
                     <button onclick="clearAllDaubs()" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs sm:text-sm font-semibold rounded-xl transition">
                         Clear Marks
@@ -725,6 +736,7 @@
         let allowMultiTickets = false;
         let lockRoomNewPlayers = false; 
         let maxRoomTickets = 50;
+        let activeHostToken = "";
         let tickets = [];
         let claimsStatus = {
             "Early 5": null,
@@ -887,6 +899,7 @@
                 isHost,
                 playerName,
                 maxRoomTickets,
+                activeHostToken,
                 tickets,
                 isAutoMarkEnabled,
                 savedAt: Date.now()
@@ -1008,6 +1021,7 @@
             }
 
             maxRoomTickets = tokenObj.maxTickets || 50;
+            activeHostToken = tokenInput;
             tokenObj.usedCount = (tokenObj.usedCount || 0) + 1;
             if (tokenObj.singleUse) {
                 tokenObj.active = false;
@@ -1111,6 +1125,7 @@
                 }
 
                 maxRoomTickets = roomData.maxRoomTickets || 50;
+                activeHostToken = roomData.hostToken || "";
 
                 const isMatchingHostToken = roomData.hostToken && roomData.hostToken.trim().toUpperCase() === playerNameInput.toUpperCase();
                 const isExistingHost = (user && roomData.hostId === user.uid) || Boolean(isMatchingHostToken);
@@ -1237,6 +1252,7 @@
                 isHost = session.isHost;
                 playerName = session.playerName;
                 maxRoomTickets = session.maxRoomTickets || 50;
+                activeHostToken = session.activeHostToken || "";
                 tickets = session.tickets || [];
                 isAutoMarkEnabled = session.isAutoMarkEnabled ?? true;
 
@@ -1254,6 +1270,7 @@
                         }
 
                         maxRoomTickets = roomData.maxRoomTickets || 50;
+                        activeHostToken = roomData.hostToken || "";
                         calledNumbers = roomData.calledNumbers || [];
                         currentNumber = roomData.currentNumber || null;
                         claimsStatus = roomData.claims || claimsStatus;
@@ -1309,6 +1326,7 @@
                     const data = roomSnap.data();
                     if (data.roomClosed && !isHost) return;
                     maxRoomTickets = data.maxRoomTickets || 50;
+                    activeHostToken = data.hostToken || "";
                     calledNumbers = data.calledNumbers || [];
                     currentNumber = data.currentNumber || null;
                     claimsStatus = data.claims || claimsStatus;
@@ -1394,6 +1412,7 @@
                     });
                     document.getElementById('nav-tabs').classList.add('hidden');
                     document.getElementById('leave-room-btn').classList.add('hidden');
+                    document.getElementById('header-host-token-badge').classList.add('hidden');
                     document.getElementById('room-status-pill').innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span><span>Lobby / Setup</span>`;
                     
                     showModal('🚪', 'Host Left Room', 'The host has ended the game and closed the room.');
@@ -1402,6 +1421,7 @@
 
                 const prevCurrent = currentNumber;
                 maxRoomTickets = data.maxRoomTickets || 50;
+                activeHostToken = data.hostToken || "";
                 calledNumbers = data.calledNumbers || [];
                 currentNumber = data.currentNumber || null;
                 claimsStatus = data.claims || claimsStatus;
@@ -1443,6 +1463,7 @@
                 });
                 roomRoster = roster;
                 renderConnectedPlayers(roomRoster);
+                updateHostTicketUsageDisplay();
                 updateHostPrizeAndEligibilityMonitor();
             }, (err) => console.error("Players listener error:", err));
         }
@@ -1452,6 +1473,13 @@
             document.getElementById('nav-tabs').classList.remove('hidden');
             document.getElementById('leave-room-btn').classList.remove('hidden');
             document.getElementById('audio-btn').classList.remove('hidden');
+
+            const headerTokenBadge = document.getElementById('header-host-token-badge');
+            const headerTokenText = document.getElementById('header-token-text');
+            if (headerTokenBadge && headerTokenText) {
+                headerTokenBadge.classList.remove('hidden');
+                headerTokenText.textContent = `TOKEN: ${activeHostToken || 'DEFAULT'}`;
+            }
 
             const statusPill = document.getElementById('room-status-pill');
             statusPill.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span><span>Party: <strong class="text-amber-400 tracking-wider">${roomCode}</strong></span>`;
@@ -1486,8 +1514,21 @@
             buildMasterBoard();
             buildPlayerMiniBoard();
             renderConnectedPlayers(roomRoster);
+            updateHostTicketUsageDisplay();
             updateHostPrizeAndEligibilityMonitor();
             updateAllRoomUI();
+        }
+
+        function updateHostTicketUsageDisplay() {
+            const usageEl = document.getElementById('display-ticket-usage');
+            if (!usageEl) return;
+            let activeCount = 0;
+            roomRoster.forEach(p => {
+                if (p && p.left !== true) {
+                    activeCount += (p.ticketCount || 0);
+                }
+            });
+            usageEl.textContent = `${activeCount} / ${maxRoomTickets === 9999 ? '∞' : maxRoomTickets}`;
         }
 
         function switchTab(tab) {
@@ -1523,6 +1564,7 @@
 
         function updateAllRoomUI() {
             updateHostBoardUI();
+            updateHostTicketUsageDisplay();
             updateHostPrizeAndEligibilityMonitor();
             updatePlayerCalledStripUI();
             updatePlayerClaimStatusUI();
@@ -1574,7 +1616,7 @@
         function updateAddTicketButtonUI() {
             const addBtn = document.getElementById('add-ticket-btn');
             if (!addBtn) return;
-            if (allowMultiTickets && tickets.length < 4) {
+            if (allowMultiTickets && tickets.length < 5) {
                 addBtn.classList.remove('hidden');
             } else {
                 addBtn.classList.add('hidden');
@@ -1586,8 +1628,8 @@
                 showModal('⚠️', 'Not Allowed', 'Multiple tickets per player are disabled by the host.');
                 return;
             }
-            if (tickets.length >= 4) {
-                showModal('⚠️', 'Max Limit Reached', 'You can have a maximum of 4 tickets.');
+            if (tickets.length >= 5) {
+                showModal('⚠️', 'Max Limit Reached', 'You can have a maximum of 5 tickets.');
                 return;
             }
 
@@ -1964,6 +2006,7 @@
             document.getElementById('nav-tabs').classList.add('hidden');
             document.getElementById('leave-room-btn').classList.add('hidden');
             document.getElementById('audio-btn').classList.add('hidden');
+            document.getElementById('header-host-token-badge').classList.add('hidden');
 
             document.getElementById('room-status-pill').innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span><span>Lobby / Setup</span>`;
 
@@ -2724,6 +2767,7 @@
 
             updateClaimsUI();
             updateHostPrizeAndEligibilityMonitor();
+            updateAllRoomUI();
             showModal('🏆', 'Prize Claimed Successfully!', `Congratulations! Your claim for ${prizeName} with ticket "${ticket.name}" has been verified!`);
         }
 
