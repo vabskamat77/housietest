@@ -54,7 +54,7 @@
                 </div>
             </div>
 
-            <!-- View Switcher Tabs (Visible when in a room) -->
+            <!-- View Switcher Tabs (Visible when in a Party) -->
             <div id="nav-tabs" class="hidden flex bg-slate-900 p-1 rounded-xl border border-slate-700">
                 <button onclick="switchTab('host')" id="tab-host" class="hidden px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all bg-emerald-600 text-white shadow">
                     Host Board
@@ -86,7 +86,7 @@
                     <span class="hidden sm:inline text-xs font-medium">Voice</span>
                 </button>
                 <button id="leave-room-btn" onclick="returnToLobbyConfirm()" class="hidden p-2 sm:p-2.5 bg-slate-700 hover:bg-rose-900/60 text-slate-300 hover:text-rose-200 border border-slate-600 rounded-xl transition text-xs font-semibold">
-                    🚪 Leave Room
+                    🚪 Leave Party
                 </button>
             </div>
         </div>
@@ -105,7 +105,7 @@
                     Play Tambola Online with Friends
                 </h2>
                 <p class="text-xs sm:text-sm text-slate-400 max-w-xl mx-auto">
-                    Host a live room with an automated voice caller board, or join an existing game using a 6-character code or invite link.
+                    Host a live Party with an automated voice caller board, or join an existing game using a 6-character code or invite link.
                 </p>
             </div>
 
@@ -118,8 +118,8 @@
                                 🎙️
                             </div>
                             <div>
-                                <h3 class="text-lg font-bold text-white leading-tight">Host a New Game</h3>
-                                <p class="text-[11px] text-slate-400 mt-0.5">Create a live room and share invite link.</p>
+                                <h3 class="text-lg font-bold text-white leading-tight">Host a new Party</h3>
+                                <p class="text-[11px] text-slate-400 mt-0.5">Create a live Party and share invite link.</p>
                             </div>
                         </div>
 
@@ -152,14 +152,14 @@
                                 🎟️
                             </div>
                             <div>
-                                <h3 class="text-lg font-bold text-white leading-tight">Join an Existing Game</h3>
-                                <p class="text-[11px] text-slate-400 mt-0.5">Enter 6-char Game Code provided by your host to start playing (1 Ticket)</p>
+                                <h3 class="text-lg font-bold text-white leading-tight">Join an existing party</h3>
+                                <p class="text-[11px] text-slate-400 mt-0.5">Enter 6-char Party Code provided by your host to start playing (1 Ticket)</p>
                             </div>
                         </div>
 
                         <div class="space-y-2.5 pt-1">
                             <div>
-                                <label class="block text-[11px] font-semibold text-slate-300 mb-1">6-Char Game Code</label>
+                                <label class="block text-[11px] font-semibold text-slate-300 mb-1">6-Char Party Code</label>
                                 <input type="text" id="join-room-code" maxlength="6" placeholder="e.g., AB12CD" oninput="this.value = this.value.toUpperCase()" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-bold tracking-widest uppercase text-amber-400 focus:outline-none focus:border-indigo-500">
                             </div>
                             <div>
@@ -171,7 +171,7 @@
 
                     <div class="pt-1">
                         <button onclick="joinExistingGame()" id="btn-join-room" class="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold rounded-xl shadow-lg transition transform active:scale-98 flex items-center justify-center gap-2 text-sm">
-                            <span>🎯 Join Live Game</span>
+                            <span>🎯 Join Live party</span>
                         </button>
                     </div>
                 </div>
@@ -180,11 +180,11 @@
 
         <!-- ================= 2. HOST BOARD SECTION ================= -->
         <div id="section-host" class="hidden space-y-6">
-            <!-- Share & Room Info Banner -->
+            <!-- Share & Party Info Banner -->
             <div id="host-share-banner" class="bg-gradient-to-r from-slate-800 via-slate-800 to-emerald-950/50 border border-emerald-500/30 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                 <div class="flex flex-wrap items-center gap-4">
                     <div class="bg-slate-900 border border-emerald-500/40 px-4 py-2.5 rounded-xl">
-                        <div class="text-[10px] uppercase tracking-wider text-emerald-400 font-bold">Room Code</div>
+                        <div class="text-[10px] uppercase tracking-wider text-emerald-400 font-bold">Party Code</div>
                         <div id="display-room-code" class="text-2xl sm:text-3xl font-black tracking-widest text-amber-400 select-all">------</div>
                     </div>
                     <div>
@@ -195,7 +195,7 @@
 
                 <div class="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
                     <button onclick="copyRoomCode()" class="flex-1 sm:flex-initial px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs sm:text-sm font-semibold rounded-xl transition flex items-center justify-center gap-1.5">
-                        <span>📋 Copy Room Code</span>
+                        <span>📋 Copy Party Code</span>
                     </button>
                     <button onclick="copyInviteLink()" class="flex-1 sm:flex-initial px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-semibold rounded-xl shadow transition flex items-center justify-center gap-1.5">
                         <span>🔗 Copy Invite Link</span>
@@ -354,7 +354,7 @@
             <div class="bg-slate-800 border border-slate-700 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
                 <div>
                     <h3 class="text-sm font-bold text-white">Restrictions/Rules</h3>
-                    <p class="text-xs text-slate-400">Configure ticket claiming restrictions and room entry rules.</p>
+                    <p class="text-xs text-slate-400">Configure ticket claiming restrictions and Party entry rules.</p>
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div class="flex items-center justify-between gap-3 bg-slate-900 px-4 py-3 rounded-xl border border-slate-700">
@@ -483,7 +483,7 @@
             <div class="bg-slate-800 border border-slate-700 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-wrap justify-between items-center gap-3">
                 <div>
                     <h2 class="text-lg font-bold text-white">Your Playing Tickets (<span id="player-tickets-header-count">0</span>)</h2>
-                    <p class="text-xs text-slate-400">Rename any ticket by clicking its title. Ticket count is locked once you join the room.</p>
+                    <p class="text-xs text-slate-400">Rename any ticket by clicking its title. Ticket count is locked once you join the Party.</p>
                 </div>
                 <div class="flex items-center space-x-2.5">
                     <button id="add-ticket-btn" onclick="addNewPlayerTicket()" class="hidden px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold rounded-xl transition shadow">
@@ -507,7 +507,7 @@
                 <div class="flex flex-wrap justify-between items-center gap-3">
                     <div>
                         <h2 class="text-xl font-bold text-white flex items-center gap-2">
-                            <span>👥 Room Players & Tickets</span>
+                            <span>👥 Party Players & Tickets</span>
                         </h2>
                         <p class="text-xs text-slate-400">View all connected players, their ticket IDs, ticket names, and called numbers out of 15.</p>
                     </div>
@@ -522,7 +522,7 @@
                 </div>
 
                 <div id="all-players-roster-list" class="space-y-4">
-                    <p class="text-xs text-slate-500 italic">Loading room participants...</p>
+                    <p class="text-xs text-slate-500 italic">Loading Party participants...</p>
                 </div>
             </div>
         </div>
@@ -535,7 +535,7 @@
                         <h2 class="text-xl font-bold text-white flex items-center gap-2">
                             <span>🏆 All Prizes & Winners Board</span>
                         </h2>
-                        <p class="text-xs text-slate-400">View all available Tambola prizes and verified winners across the room.</p>
+                        <p class="text-xs text-slate-400">View all available Tambola prizes and verified winners across the Party.</p>
                     </div>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="prizex-overview-list">
@@ -744,7 +744,6 @@
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // FIREBASE CONFIGURATION
         const MANUAL_FIREBASE_CONFIG = {
             apiKey: "AIzaSyCgQ27fdHpO13OQ9V5fNIwktY_1Ezm7UQc",
             authDomain: "online-housie-a4eb3.firebaseapp.com",
@@ -804,7 +803,6 @@
             return currentUser;
         }
 
-        // Traditional Tambola Nicknames
         const tambolaNicknames = {
             1: "Top of the house / One", 2: "Kaala Dhan / Duck", 3: "Economy Six / Dilwala", 4: "Murgi / Four", 5: "Panchhi / Hand", 6: "Sixer / Cabinet", 7: "Lucky Seven", 8: "Garden Gate", 9: "Doctor's Time", 10: "A Reel / Ten",
             11: "Legs Eleven", 12: "One Dozen", 13: "Unlucky for Some", 14: "Valentine's Day", 15: "Young and Keen", 16: "Sweet Sixteen", 17: "Dancing Queen", 18: "Coming of Age", 19: "Goodbye Teens", 20: "Blind Twenty / Score",
@@ -817,7 +815,6 @@
             81: "Fat Lady with a Walking Stick", 82: "Straight On Through", 83: "Time for Tea", 84: "Seven Dozen", 85: "Staying Alive", 86: "Between the Sticks", 87: "Torquay in Devon", 88: "All the Eights", 89: "Nearly There", 90: "Top of the Shop / Grand Finale"
         };
 
-        // Application State
         let roomCode = null;
         let isHost = false;
         let playerName = "Player";
@@ -851,7 +848,6 @@
         let unsubscribePlayers = null;
         let roomRoster = [];
 
-        // Owner Passcode & Tokens DB State
         let ownerPasscode = localStorage.getItem('tambola_owner_passcode_v1') || 'ADMIN1234';
         let hostingTokensDB = JSON.parse(localStorage.getItem('tambola_hosting_tokens_v2') || JSON.stringify([
             { token: "HOST-2026-FP10", maxTickets: 10, singleUse: false, usedCount: 0, active: true, createdAt: Date.now() },
@@ -1233,7 +1229,7 @@
                 const btn = document.getElementById('btn-create-room');
                 try {
                     btn.disabled = true;
-                    btn.innerHTML = '<span>⏳ Creating Live Room...</span>';
+                    btn.innerHTML = '<span>⏳ Creating Live Party...</span>';
 
                     const user = await ensureAuth();
                     const hostUid = (user && user.uid) ? user.uid : getOrCreateFallbackUid('host');
@@ -1263,7 +1259,7 @@
 
                     subscribeToRoom(roomCode);
                 } catch (err) {
-                    console.error("Failed to create multiplayer room:", err);
+                    console.error("Failed to create multiplayer Party:", err);
                     showModal('⚠️', 'Multiplayer Sync Issue', `Could not connect to the live server (${err.message || 'Network/Storage blocked'}).`);
                 } finally {
                     btn.disabled = false;
@@ -1272,6 +1268,7 @@
             }
 
             enterGameRoomUI();
+            showModal('🎉', 'Party Successfully Created!', `Your new party has been successfully created!\nParty Code: ${roomCode}`);
         }
 
         async function joinExistingGame() {
@@ -1280,7 +1277,7 @@
             const ticketCountInput = 1;
 
             if (codeInput.length !== 6) {
-                showModal('⚠️', 'Invalid Code', 'Please enter a valid 6-character Game Code.');
+                showModal('⚠️', 'Invalid Code', 'Please enter a valid 6-character Party Code.');
                 return;
             }
             if (!playerNameInput) {
@@ -1294,7 +1291,7 @@
 
             const btn = document.getElementById('btn-join-room');
             btn.disabled = true;
-            btn.innerHTML = '<span>⏳ Joining Room...</span>';
+            btn.innerHTML = '<span>⏳ Joining Party...</span>';
 
             try {
                 const user = await ensureAuth();
@@ -1302,7 +1299,7 @@
                 const snap = await getDoc(roomRef);
 
                 if (!snap.exists()) {
-                    showModal('❌', 'Room Not Found', `No active game found with code "${codeInput}". Double-check with your host.`);
+                    showModal('❌', 'Party Not Found', `No active game found with code "${codeInput}". Double-check with your host.`);
                     btn.disabled = false;
                     btn.innerHTML = '<span>🎯 Join Live Game</span>';
                     return;
@@ -1310,7 +1307,7 @@
 
                 const roomData = snap.data();
                 if (roomData.roomClosed) {
-                    showModal('🚫', 'Room Permanently Closed', `Room "${codeInput}" has been ended and permanently closed by the host. It cannot be retrieved or rejoined.`);
+                    showModal('🚫', 'Party Permanently Closed', `Party "${codeInput}" has been ended and permanently closed by the host. It cannot be retrieved or rejoined.`);
                     btn.disabled = false;
                     btn.innerHTML = '<span>🎯 Join Live Game</span>';
                     return;
@@ -1322,13 +1319,12 @@
                 const isExistingHost = (user && roomData.hostId === user.uid) || Boolean(isMatchingHostToken);
 
                 if (roomData.lockRoomNewPlayers && !isExistingHost) {
-                    showModal('🔒', 'Room Locked', 'The host has locked this room and is not allowing new players to join.');
+                    showModal('🔒', 'Party Locked', 'The host has locked this Party and is not allowing new players to join.');
                     btn.disabled = false;
                     btn.innerHTML = '<span>🎯 Join Live Game</span>';
                     return;
                 }
 
-                // If re-joining as the authenticated host, restore Host Board directly without creating a player ticket
                 if (isExistingHost) {
                     roomCode = codeInput;
                     isHost = true;
@@ -1355,11 +1351,10 @@
 
                     subscribeToRoom(roomCode);
                     enterGameRoomUI();
-                    showModal('🎙️', 'Host Re-joined', `Welcome back! You have securely re-joined room ${roomCode} as the Host.`);
+                    showModal('🎙️', 'Host Re-joined', `Welcome back! You have securely re-joined Party ${roomCode} as the Host.`);
                     return;
                 }
 
-                // Calculate current total tickets in room excluding current user
                 const playersCol = collection(db, 'artifacts', appId, 'public', 'data', `tambola_players_${codeInput}`);
                 const playersSnap = await getDocs(playersCol);
                 let currentTotalTickets = 0;
@@ -1371,7 +1366,7 @@
                 });
 
                 if (currentTotalTickets + ticketCountInput > maxRoomTickets) {
-                    showModal('⚠️', 'Ticket Capacity Reached', `This room has a maximum capacity of ${maxRoomTickets} tickets. Joining would exceed the limit (${currentTotalTickets} already taken).`);
+                    showModal('⚠️', 'Ticket Capacity Reached', `This Party has a maximum capacity of ${maxRoomTickets} tickets. Joining would exceed the limit (${currentTotalTickets} already taken).`);
                     btn.disabled = false;
                     btn.innerHTML = '<span>🎯 Join Live Game</span>';
                     return;
@@ -1420,8 +1415,8 @@
                 subscribeToRoom(roomCode);
                 enterGameRoomUI();
             } catch (err) {
-                console.error("Join room error:", err);
-                showModal('❌', 'Join Failed', 'Unable to join room right now. Please try again.');
+                console.error("Join Party error:", err);
+                showModal('❌', 'Join Failed', 'Unable to join Party right now. Please try again.');
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = '<span>🎯 Join Live Game</span>';
@@ -1659,12 +1654,11 @@
             document.getElementById('nav-tabs').classList.remove('hidden');
             document.getElementById('leave-room-btn').classList.remove('hidden');
             
-            // Hide Owner Portal button once inside a room
             const ownerPortalBtn = document.getElementById('owner-portal-btn');
             if (ownerPortalBtn) ownerPortalBtn.classList.add('hidden');
 
             const statusPill = document.getElementById('room-status-pill');
-            statusPill.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span><span>Room: <strong class="text-amber-400 tracking-wider">${roomCode}</strong></span>`;
+            statusPill.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span><span>Party: <strong class="text-amber-400 tracking-wider">${roomCode}</strong></span>`;
 
             document.getElementById('display-room-code').textContent = roomCode;
             document.getElementById('host-share-banner').classList.remove('hidden');
@@ -1801,7 +1795,6 @@
                 return;
             }
 
-            // Check room capacity
             if (db && roomCode) {
                 try {
                     const playersCol = collection(db, 'artifacts', appId, 'public', 'data', `tambola_players_${roomCode}`);
@@ -1813,9 +1806,9 @@
                             currentTotalTickets += (p.ticketCount || 0);
                         }
                     });
-                    currentTotalTickets += tickets.length; // current user tickets before adding
+                    currentTotalTickets += tickets.length;
                     if (currentTotalTickets + 1 > maxRoomTickets) {
-                        showModal('⚠️', 'Capacity Reached', 'Adding another ticket would exceed the room ticket capacity limit.');
+                        showModal('⚠️', 'Capacity Reached', 'Adding another ticket would exceed the Party ticket capacity limit.');
                         return;
                     }
                 } catch (e) {}
@@ -2008,12 +2001,12 @@
             if (!roomCode) return;
             try {
                 navigator.clipboard.writeText(roomCode).then(() => {
-                    showModal('📋', 'Room Code Copied!', `Room code "${roomCode}" has been copied to your clipboard.`);
+                    showModal('📋', 'Party Code Copied!', `Party code "${roomCode}" has been copied to your clipboard.`);
                 }).catch(() => {
-                    fallbackCopyToClipboard(roomCode, 'Room Code Copied!', `Room code "${roomCode}" has been copied to your clipboard.`);
+                    fallbackCopyToClipboard(roomCode, 'Party Code Copied!', `Party code "${roomCode}" has been copied to your clipboard.`);
                 });
             } catch (e) {
-                fallbackCopyToClipboard(roomCode, 'Room Code Copied!', `Room code "${roomCode}" has been copied to your clipboard.`);
+                fallbackCopyToClipboard(roomCode, 'Party Code Copied!', `Party code "${roomCode}" has been copied to your clipboard.`);
             }
         }
 
@@ -2021,18 +2014,18 @@
             const url = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
             try {
                 navigator.clipboard.writeText(url).then(() => {
-                    showModal('🔗', 'Invite Link Copied!', 'Share this link with your friends so they can join your room.');
+                    showModal('🔗', 'Invite Link Copied!', 'Share this link with your friends so they can join your Party.');
                 }).catch(() => {
-                    fallbackCopyToClipboard(url, 'Invite Link Copied!', 'Share this link with your friends so they can join your room.');
+                    fallbackCopyToClipboard(url, 'Invite Link Copied!', 'Share this link with your friends so they can join your Party.');
                 });
             } catch (e) {
-                fallbackCopyToClipboard(url, 'Invite Link Copied!', 'Share this link with your friends so they can join your room.');
+                fallbackCopyToClipboard(url, 'Invite Link Copied!', 'Share this link with your friends so they can join your Party.');
             }
         }
 
         function copyShareMessage() {
             const url = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
-            const msg = `Join my live Tambola / Housie game! 🎲\nRoom Code: ${roomCode}\nClick here to join: ${url}`;
+            const msg = `Join my live Tambola / Housie game! 🎲\nParty Code: ${roomCode}\nClick here to join: ${url}`;
             try {
                 navigator.clipboard.writeText(msg).then(() => {
                     showModal('💬', 'WhatsApp Message Copied!', 'Paste this message into WhatsApp or any chat to invite players.');
@@ -2070,7 +2063,7 @@
             const modal = document.getElementById('custom-modal');
             document.getElementById('modal-icon').textContent = '⚠️';
             document.getElementById('modal-title').textContent = 'Reset Game Board?';
-            document.getElementById('modal-message').textContent = 'This will clear all called numbers and prize claims for the room. Are you sure?';
+            document.getElementById('modal-message').textContent = 'This will clear all called numbers and prize claims for the Party. Are you sure?';
             document.getElementById('modal-actions').innerHTML = `
                 <button onclick="closeModal()" class="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded-xl text-sm">Cancel</button>
                 <button onclick="closeModal(); resetRoomNumbers();" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-xl text-sm">Reset Board</button>
@@ -2099,7 +2092,7 @@
                         claims: claimsStatus
                     });
                 } catch (err) {
-                    console.error("Error resetting room:", err);
+                    console.error("Error resetting Party:", err);
                 }
             }
             updateAllRoomUI();
@@ -2109,13 +2102,13 @@
         function returnToLobbyConfirm() {
             const modal = document.getElementById('custom-modal');
             document.getElementById('modal-icon').textContent = '🚪';
-            document.getElementById('modal-title').textContent = isHost ? 'End & Permanently Close Room?' : 'Leave Room?';
+            document.getElementById('modal-title').textContent = isHost ? 'End & Permanently Close Party?' : 'Leave Party?';
             document.getElementById('modal-message').textContent = isHost
-                ? 'Ending the room will permanently close it and remove all players. Once you leave, this room cannot be retrieved or reopened.'
-                : 'Are you sure you want to leave this room?';
+                ? 'Ending the Party will permanently close it and remove all players. Once you leave, this Party cannot be retrieved or reopened.'
+                : 'Are you sure you want to leave this Party?';
             document.getElementById('modal-actions').innerHTML = `
                 <button onclick="closeModal()" class="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded-xl text-sm">Stay</button>
-                <button onclick="closeModal(); executeLeaveRoom();" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-xl text-sm">${isHost ? 'End Room Permanently' : 'Leave'}</button>
+                <button onclick="closeModal(); executeLeaveRoom();" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-xl text-sm">${isHost ? 'End Party Permanently' : 'Leave'}</button>
             `;
             modal.classList.remove('hidden');
         }
@@ -2134,7 +2127,7 @@
                         hostToken: null
                     });
                 } catch (e) {
-                    console.error("Error closing room on leave:", e);
+                    console.error("Error closing Party on leave:", e);
                 }
             }
 
@@ -2175,7 +2168,6 @@
             document.getElementById('nav-tabs').classList.add('hidden');
             document.getElementById('leave-room-btn').classList.add('hidden');
             
-            // Show Owner Portal button again when returning to lobby
             const ownerPortalBtn = document.getElementById('owner-portal-btn');
             if (ownerPortalBtn) ownerPortalBtn.classList.remove('hidden');
 
@@ -2190,10 +2182,10 @@
 
             showModal(
                 '👋',
-                wasHost ? 'Room Permanently Closed' : 'Left Room',
+                wasHost ? 'Party Permanently Closed' : 'Left Party',
                 wasHost
-                    ? 'The room has been ended and permanently closed for everyone. It can no longer be retrieved.'
-                    : 'All room data and session details have been refreshed and cleared.'
+                    ? 'The Party has been ended and permanently closed for everyone. It can no longer be retrieved.'
+                    : 'All Party data and session details have been refreshed and cleared.'
             );
         }
 
@@ -2504,7 +2496,7 @@
             }
         }
 
-        async function callNumberFromBoard(num) {
+        function callNumberFromBoard(num) {
             if (!isHost) return;
             if (calledNumbers.includes(num)) return;
             calledNumbers.push(num);
@@ -2513,7 +2505,7 @@
             if (db) {
                 try {
                     const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
-                    await updateDoc(roomRef, {
+                    updateDoc(roomRef, {
                         calledNumbers: calledNumbers,
                         currentNumber: currentNumber
                     });
