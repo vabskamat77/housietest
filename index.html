@@ -59,6 +59,9 @@
                 <button onclick="switchTab('host')" id="tab-host" class="hidden px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all bg-emerald-600 text-white shadow">
                     Host Board
                 </button>
+                <button onclick="switchTab('board')" id="tab-board" class="hidden px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all text-slate-400 hover:text-white">
+                    Master Board
+                </button>
                 <button onclick="switchTab('player')" id="tab-player" class="hidden px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all text-slate-400 hover:text-white">
                     My Tickets (<span id="ticket-count-badge">0</span>)
                 </button>
@@ -374,26 +377,29 @@
                     </div>
                 </div>
             </div>
+        </div>
 
+        <!-- ================= 2.5. MASTER BOARD TAB (HOST ONLY) ================= -->
+        <div id="section-board" class="hidden space-y-6">
             <!-- Master 1-90 Board Grid -->
-            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 sm:p-6 shadow-xl">
-                <div class="flex flex-wrap justify-between items-center gap-2 mb-4">
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-3 sm:p-4 shadow-xl max-w-2xl mx-auto">
+                <div class="flex flex-wrap justify-between items-center gap-2 mb-2.5">
                     <div>
-                        <h2 class="text-base sm:text-lg font-bold text-white">Master Housie Board (1 to 90)</h2>
-                        <p class="text-[11px] text-slate-400">Tip: Enter a number above or tap any uncalled number on the board to call it manually.</p>
+                        <h2 class="text-sm font-bold text-white">Master Housie Board (1 to 90)</h2>
+                        <p class="text-[10px] text-slate-400">Display-only master board for tracking called numbers.</p>
                     </div>
-                    <div class="flex items-center space-x-4 text-xs font-medium">
-                        <div class="flex items-center space-x-1.5">
-                            <div class="w-3.5 h-3.5 rounded bg-emerald-600"></div>
+                    <div class="flex items-center space-x-3 text-[11px] font-medium">
+                        <div class="flex items-center space-x-1">
+                            <div class="w-3 h-3 rounded bg-emerald-600"></div>
                             <span class="text-slate-300">Called</span>
                         </div>
-                        <div class="flex items-center space-x-1.5">
-                            <div class="w-3.5 h-3.5 rounded bg-slate-900 border border-slate-700"></div>
+                        <div class="flex items-center space-x-1">
+                            <div class="w-3 h-3 rounded bg-slate-900 border border-slate-700"></div>
                             <span class="text-slate-400">Uncalled</span>
                         </div>
                     </div>
                 </div>
-                <div id="master-board" class="grid grid-cols-10 gap-1.5 sm:gap-2.5">
+                <div id="master-board" class="grid grid-cols-10 gap-1">
                     <!-- Dynamically populated -->
                 </div>
             </div>
@@ -1622,6 +1628,7 @@
             document.getElementById('host-share-banner').classList.remove('hidden');
 
             const tabHost = document.getElementById('tab-host');
+            const tabBoard = document.getElementById('tab-board');
             const tabPlayers = document.getElementById('tab-players');
             const tabPrizex = document.getElementById('tab-prizex');
             if (tabPrizex) {
@@ -1634,10 +1641,12 @@
 
             if (isHost) {
                 tabHost.classList.remove('hidden');
+                if (tabBoard) tabBoard.classList.remove('hidden');
                 tabPlayers.classList.remove('hidden');
                 switchTab('host');
             } else {
                 tabHost.classList.add('hidden');
+                if (tabBoard) tabBoard.classList.add('hidden');
                 tabPlayers.classList.add('hidden');
                 switchTab('player');
             }
@@ -1650,11 +1659,11 @@
         }
 
         function switchTab(tab) {
-            ['host', 'player', 'players', 'prizex', 'claims'].forEach(t => {
+            ['host', 'board', 'player', 'players', 'prizex', 'claims'].forEach(t => {
                 const sec = document.getElementById(`section-${t}`);
                 const btn = document.getElementById(`tab-${t}`);
                 if (!sec || !btn) return;
-                if (!isHost && t === 'prizex') {
+                if (!isHost && (t === 'prizex' || t === 'board')) {
                     btn.classList.add('hidden');
                     sec.classList.add('hidden');
                     return;
@@ -2366,7 +2375,7 @@
             let html = '';
             for (let i = 1; i <= 90; i++) {
                 html += `
-                    <div id="master-cell-${i}" onclick="callNumberFromBoard(${i})" class="board-number aspect-square rounded-lg bg-slate-900 border border-slate-700/80 flex items-center justify-center font-bold text-xs sm:text-sm text-slate-400 cursor-pointer hover:border-emerald-500 hover:text-white select-none">
+                    <div id="master-cell-${i}" class="board-number aspect-square rounded-sm bg-slate-900 border border-slate-700/80 flex items-center justify-center font-bold text-[10px] sm:text-[11px] text-slate-400 select-none">
                         ${i}
                     </div>
                 `;
@@ -2397,12 +2406,12 @@
                 if (!cell) continue;
                 if (calledSet.has(i)) {
                     if (i === currentNumber) {
-                        cell.className = "board-number aspect-square rounded-lg bg-gradient-to-tr from-amber-500 to-orange-600 text-white border-2 border-white flex items-center justify-center font-black text-xs sm:text-sm shadow-lg animate-pulse select-none cursor-pointer";
+                        cell.className = "board-number aspect-square rounded-sm bg-gradient-to-tr from-amber-500 to-orange-600 text-white border border-white flex items-center justify-center font-black text-[10px] sm:text-[11px] shadow-sm animate-pulse select-none";
                     } else {
-                        cell.className = "board-number aspect-square rounded-lg bg-emerald-600 text-white border border-emerald-400 flex items-center justify-center font-bold text-xs sm:text-sm select-none cursor-pointer";
+                        cell.className = "board-number aspect-square rounded-sm bg-emerald-600 text-white border border-emerald-400 flex items-center justify-center font-bold text-[10px] sm:text-[11px] select-none";
                     }
                 } else {
-                    cell.className = "board-number aspect-square rounded-lg bg-slate-900 border border-slate-700/80 flex items-center justify-center font-bold text-xs sm:text-sm text-slate-400 cursor-pointer hover:border-emerald-500 hover:text-white select-none";
+                    cell.className = "board-number aspect-square rounded-sm bg-slate-900 border border-slate-700/80 flex items-center justify-center font-bold text-[10px] sm:text-[11px] text-slate-400 select-none";
                 }
             }
 
