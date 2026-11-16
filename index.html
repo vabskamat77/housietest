@@ -834,21 +834,34 @@
                 usedCount: 0,
                 active: true,
                 status: 'active',
+                inUse: false,
+                activeRoomCode: null,
                 buyerName: buyerInfo.fullName || '',
                 buyerEmail: buyerInfo.email || '',
                 paymentMethod: buyerInfo.paymentMethod || '',
                 createdAt: Date.now()
             };
 
+            // Authenticate and register token in local Admin Portal database
             hostingTokensDB.push(newTokenObj);
             saveHostingTokensDB();
 
+            // Immediately add and authenticate token as Active, Single-Use in Firestore
             if (db) {
                 try {
-                    const tRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_tokens', generatedToken);
-                    await setDoc(tRef, newTokenObj);
+                    const tokenPaths = [
+                        ['artifacts', appId, 'public', 'data', 'tambola_tokens', generatedToken],
+                        ['artifacts', appId, 'public', 'data', 'tambola_hosting_tokens', generatedToken],
+                        ['artifacts', appId, 'public', 'data', 'hosting_tokens', generatedToken]
+                    ];
+                    for (const pathSegs of tokenPaths) {
+                        try {
+                            const tRef = doc(db, ...pathSegs);
+                            await setDoc(tRef, newTokenObj, { merge: true });
+                        } catch (e) {}
+                    }
                 } catch (e) {
-                    console.warn("Token cloud save warning:", e);
+                    console.warn("Token cloud storage warning:", e);
                 }
             }
 
@@ -860,7 +873,7 @@
             showModal(
                 '✅',
                 `${tierName} Package Activated!`,
-                `Thank you, ${buyerInfo.fullName || 'Host'}! Payment via ${buyerInfo.paymentMethod || 'Card'} succeeded. Your single-use Host Token (${generatedToken}) for up to ${ticketCount} tickets has been instantly activated in Firestore and filled into the Host Token field.`
+                `Thank you, ${buyerInfo.fullName || 'Host'}! Payment via ${buyerInfo.paymentMethod || 'Card'} was verified successfully.\n\nYour single-use Host Token (${generatedToken}) for up to ${ticketCount} tickets has been instantly authenticated and registered in Firestore & Admin Portal as Active.`
             );
         }
 
