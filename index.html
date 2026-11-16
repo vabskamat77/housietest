@@ -184,6 +184,10 @@
                         <div class="text-[10px] uppercase tracking-wider text-emerald-400 font-bold">Party Code</div>
                         <div id="display-room-code" class="text-2xl sm:text-3xl font-black tracking-widest text-amber-400 select-all">------</div>
                     </div>
+                    <div class="bg-slate-900 border border-emerald-500/40 px-4 py-2.5 rounded-xl">
+                        <div class="text-[10px] uppercase tracking-wider text-emerald-400 font-bold">Active Tickets</div>
+                        <div id="display-active-tickets" class="text-xl sm:text-2xl font-black tracking-wider text-emerald-400">0 / 50</div>
+                    </div>
                     <div>
                         <h3 class="text-sm sm:text-base font-bold text-white">Invite Players to Join</h3>
                         <p class="text-xs text-slate-300">Share the 6-character code or click below to copy the direct invite link.</p>
@@ -538,75 +542,7 @@
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="claims-grid">
-                    <!-- Early 5 -->
-                    <div class="bg-slate-900/70 border border-slate-700 rounded-xl p-5 flex flex-col justify-between">
-                        <div>
-                            <div class="flex justify-between items-start mb-2">
-                                <h3 class="font-bold text-white text-base">Early 5</h3>
-                                <span class="text-xs px-2.5 py-1 rounded-full bg-emerald-900/60 text-emerald-300 font-semibold">Any 5 Numbers</span>
-                            </div>
-                            <p class="text-xs text-slate-400 mb-4">First player to mark any 5 called numbers on a single ticket.</p>
-                        </div>
-                        <button onclick="claimPrize('Early 5')" id="claim-early-5" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg text-sm transition shadow">
-                            Claim Early 5 🎉
-                        </button>
-                    </div>
-
-                    <!-- Top Line -->
-                    <div class="bg-slate-900/70 border border-slate-700 rounded-xl p-5 flex flex-col justify-between">
-                        <div>
-                            <div class="flex justify-between items-start mb-2">
-                                <h3 class="font-bold text-white text-base">Top Line</h3>
-                                <span class="text-xs px-2.5 py-1 rounded-full bg-emerald-900/60 text-emerald-300 font-semibold">Row 1</span>
-                            </div>
-                            <p class="text-xs text-slate-400 mb-4">All 5 numbers in the top row of the selected ticket called & marked.</p>
-                        </div>
-                        <button onclick="claimPrize('Top Line')" id="claim-top-line" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg text-sm transition shadow">
-                            Claim Top Line 🎉
-                        </button>
-                    </div>
-
-                    <!-- Middle Line -->
-                    <div class="bg-slate-900/70 border border-slate-700 rounded-xl p-5 flex flex-col justify-between">
-                        <div>
-                            <div class="flex justify-between items-start mb-2">
-                                <h3 class="font-bold text-white text-base">Middle Line</h3>
-                                <span class="text-xs px-2.5 py-1 rounded-full bg-emerald-900/60 text-emerald-300 font-semibold">Row 2</span>
-                            </div>
-                            <p class="text-xs text-slate-400 mb-4">All 5 numbers in the middle row of the selected ticket called & marked.</p>
-                        </div>
-                        <button onclick="claimPrize('Middle Line')" id="claim-middle-line" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg text-sm transition shadow">
-                            Claim Middle Line 🎉
-                        </button>
-                    </div>
-
-                    <!-- Bottom Line -->
-                    <div class="bg-slate-900/70 border border-slate-700 rounded-xl p-5 flex flex-col justify-between">
-                        <div>
-                            <div class="flex justify-between items-start mb-2">
-                                <h3 class="font-bold text-white text-base">Bottom Line</h3>
-                                <span class="text-xs px-2.5 py-1 rounded-full bg-emerald-900/60 text-emerald-300 font-semibold">Row 3</span>
-                            </div>
-                            <p class="text-xs text-slate-400 mb-4">All 5 numbers in the bottom row of the selected ticket called & marked.</p>
-                        </div>
-                        <button onclick="claimPrize('Bottom Line')" id="claim-bottom-line" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg text-sm transition shadow">
-                            Claim Bottom Line 🎉
-                        </button>
-                    </div>
-
-                    <!-- Full House -->
-                    <div class="bg-slate-900/70 border border-slate-700 rounded-xl p-5 flex flex-col justify-between">
-                        <div>
-                            <div class="flex justify-between items-start mb-2">
-                                <h3 class="font-bold text-white text-base">Full House</h3>
-                                <span class="text-xs px-2.5 py-1 rounded-full bg-amber-900/60 text-amber-300 font-semibold">All 15 Numbers</span>
-                            </div>
-                            <p class="text-xs text-slate-400 mb-4">All 15 numbers on the selected ticket called & marked!</p>
-                        </div>
-                        <button onclick="claimPrize('Full House')" id="claim-full-house" class="w-full py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-bold rounded-lg text-sm transition shadow">
-                            Claim Full House 🏆
-                        </button>
-                    </div>
+                    <!-- Populated dynamically -->
                 </div>
             </div>
 
@@ -1346,22 +1282,18 @@
 
         async function forceRefreshRoomData(showFeedback = false) {
             if (!roomCode || !db) return;
-            const statusLabel = document.getElementById('sync-status-label');
             const refreshBtn = document.getElementById('btn-refresh-players');
-            if (statusLabel) statusLabel.textContent = 'Syncing...';
             if (refreshBtn) refreshBtn.disabled = true;
 
             try {
                 await ensureAuth();
                 await fetchRoomAndPlayersSnapshot(roomCode);
                 subscribeToRoom(roomCode);
-                if (statusLabel) statusLabel.textContent = 'Synced just now';
                 if (showFeedback) {
                     showModal('🔄', 'Synced', 'Room data and connected players list have been refreshed.');
                 }
             } catch (err) {
                 console.error("Force refresh error:", err);
-                if (statusLabel) statusLabel.textContent = 'Sync failed';
             } finally {
                 if (refreshBtn) refreshBtn.disabled = false;
             }
@@ -1529,6 +1461,22 @@
             renderPlayerTickets();
             updateClaimsUI();
             updateAddTicketButtonUI();
+
+            const displayActiveTicketsEl = document.getElementById('display-active-tickets');
+            if (displayActiveTicketsEl) {
+                let totalActiveTickets = 0;
+                const allParticipants = getAllParticipantsList(roomRoster);
+                allParticipants.forEach(p => {
+                    if (p.serializedTickets) {
+                        try {
+                            const parsed = JSON.parse(p.serializedTickets);
+                            totalActiveTickets += parsed.length;
+                        } catch (e) {}
+                    }
+                });
+                displayActiveTicketsEl.textContent = `${totalActiveTickets} / ${maxRoomTickets}`;
+            }
+
             if (isHost && !document.getElementById('section-players').classList.contains('hidden')) {
                 renderAllPlayersRosterTab();
             }
@@ -1734,7 +1682,7 @@
                     </div>
                 `;
             }).join('');
-            claimedCountEl.textContent = `${claimedTotal} / ${prizeOrder.length}`;
+            if (claimedCountEl) claimedCountEl.textContent = `${claimedTotal} / ${prizeOrder.length}`;
 
             const participants = [];
             roomRoster.forEach(p => {
@@ -1773,7 +1721,7 @@
                 });
             });
 
-            eligibleCountEl.textContent = eligibleItems.length;
+            if (eligibleCountEl) eligibleCountEl.textContent = eligibleItems.length;
             if (eligibleItems.length === 0) {
                 eligibleListEl.innerHTML = `<p class="text-xs text-slate-500 italic">No tickets eligible for unclaimed prizes yet...</p>`;
             } else {
@@ -1873,6 +1821,7 @@
             currentNumber = null;
             claimsStatus = {
                 "Early 5": null,
+                "Early 10": null,
                 "Top Line": null,
                 "Middle Line": null,
                 "Bottom Line": null,
@@ -1945,6 +1894,7 @@
             roomRoster = [];
             claimsStatus = {
                 "Early 5": null,
+                "Early 10": null,
                 "Top Line": null,
                 "Middle Line": null,
                 "Bottom Line": null,
@@ -2312,42 +2262,23 @@
         }
 
         function renderConnectedPlayers(roster) {
-            const listEl = document.getElementById('connected-players-list');
-            const countEl = document.getElementById('player-roster-count');
-            if (!listEl) return;
+            const displayActiveTicketsEl = document.getElementById('display-active-tickets');
 
             const allParticipants = getAllParticipantsList(roster);
-            if (countEl) countEl.textContent = allParticipants.length;
 
-            if (allParticipants.length === 0) {
-                listEl.innerHTML = `<span class="text-xs text-slate-500 italic">Waiting for players to join...</span>`;
-                return;
-            }
-
-            listEl.innerHTML = allParticipants.map(p => {
-                let parsedTickets = [];
+            let totalActiveTickets = 0;
+            allParticipants.forEach(p => {
                 if (p.serializedTickets) {
                     try {
-                        parsedTickets = JSON.parse(p.serializedTickets);
-                    } catch (e) {
-                        parsedTickets = [];
-                    }
+                        const parsed = JSON.parse(p.serializedTickets);
+                        totalActiveTickets += parsed.length;
+                    } catch (e) {}
                 }
-                const ticketCount = parsedTickets.length;
-                const ticketNames = parsedTickets.map(t => t.name);
-                const ticketNamesStr = ticketNames.length > 0 ? `• "${ticketNames.join('", "')}"` : '';
+            });
 
-                return `
-                    <div class="bg-slate-900/80 border border-slate-700/60 rounded-xl px-3 py-2 flex items-center justify-between gap-2 text-xs">
-                        <div class="flex items-center gap-2">
-                            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-                            <span class="font-bold text-white">${escapeHtml(p.name || 'Player')}</span>
-                            <span class="text-slate-400 truncate max-w-[200px]">${escapeHtml(ticketNamesStr)}</span>
-                        </div>
-                        <span class="px-2 py-0.5 rounded bg-slate-800 text-indigo-300 font-semibold border border-slate-700">${ticketCount} ticket${ticketCount === 1 ? '' : 's'}</span>
-                    </div>
-                `;
-            }).join('');
+            if (displayActiveTicketsEl) {
+                displayActiveTicketsEl.textContent = `${totalActiveTickets} / ${maxRoomTickets}`;
+            }
         }
 
         function updatePlayerCalledStripUI() {
