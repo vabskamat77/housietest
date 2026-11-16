@@ -680,6 +680,9 @@
         };
         let unsubscribeRoom = null;
         let unsubscribePlayers = null;
+        let unsubscribeToken = null;
+        let statusMonitorInterval = null;
+        let activeHostTokenCode = null;
         let roomRoster = [];
 
         let hostingTokensDB = JSON.parse(localStorage.getItem('tambola_hosting_tokens_v2') || JSON.stringify([
@@ -937,109 +940,73 @@
                 return;
             }
 
-            const btn = document.getElementById('btn-create-room');
-            btn.disabled = true;
-            btn.innerHTML = '<span>⏳ Validating Token...</span>';
+            let validTokenData = null;
 
-            try {
-                let validTokenData = null;
-                let firestoreTokenRef = null;
-                const localTokenObj = hostingTokensDB.find(t => t.token === tokenInput);
-
-                if (db) {
-                    await ensureAuth();
-                    const candidatePaths = [
-                        ['artifacts', appId, 'public', 'data', 'tambola_tokens', tokenInput],
-                        ['artifacts', appId, 'public', 'data', 'tambola_hosting_tokens', tokenInput],
-                        ['artifacts', appId, 'public', 'data', 'hosting_tokens', tokenInput]
-                    ];
-
-                    for (const pathSegments of candidatePaths) {
-                        try {
-                            const ref = doc(db, ...pathSegments);
-                            const snap = await getDoc(ref);
-                            if (snap.exists()) {
-                                validTokenData = snap.data();
-                                firestoreTokenRef = ref;
-                                break;
-                            }
-                        } catch (e) {
-                            console.warn('Token lookup path skipped:', pathSegments.join('/'), e);
-                        }
-                    }
-                }
-
-                // Fall back to local token registry if not overridden by a Firestore token doc
-                if (!validTokenData && localTokenObj) {
-                    validTokenData = localTokenObj;
-                }
-
-                if (!validTokenData) {
-                    showModal('❌', 'Invalid Host Token', `The host token "${tokenInput}" was not found. Please check your token and try again.`);
-                    return;
-                }
-
-                // Strictly verify active flag and status
-                const isExplicitlyInactive = validTokenData.active === false || (typeof validTokenData.status === 'string' && validTokenData.status.toLowerCase() !== 'active');
-                if (isExplicitlyInactive) {
-                    showModal('🚫', 'Inactive Host Token', `The host token "${tokenInput}" is currently inactive or disabled and cannot be used to host a party.`);
-                    return;
-                }
-
-                // Verify expiration if present
-                if (validTokenData.expiresAt && Number(validTokenData.expiresAt) < Date.now()) {
-                    showModal('⌛', 'Expired Host Token', `The host token "${tokenInput}" has expired.`);
-                    return;
-                }
-
-                // Verify single-use and maxUses constraints
-                const currentUsedCount = Number(validTokenData.usedCount || 0);
-                if (validTokenData.singleUse && currentUsedCount >= 1) {
-                    showModal('🚫', 'Token Already Used', `The single-use host token "${tokenInput}" has already been redeemed.`);
-                    return;
-                }
-                if (validTokenData.maxUses && currentUsedCount >= Number(validTokenData.maxUses)) {
-                    showModal('🚫', 'Token Usage Limit Reached', `The host token "${tokenInput}" has reached its maximum number of uses.`);
-                    return;
-                }
-
-                // Token is active and valid — update usage state cleanly
-                maxRoomTickets = Number(validTokenData.maxTickets) || 50;
-                const nextUsedCount = currentUsedCount + 1;
-                const shouldDeactivate = Boolean(validTokenData.singleUse) || (validTokenData.maxUses && nextUsedCount >= Number(validTokenData.maxUses));
-
-                if (firestoreTokenRef) {
+            if (db) {
+                const candidatePaths = [
+                    ['artifacts', appId, 'public', 'data', 'tambola_tokens', tokenInput],
+                    ['artifacts', appId, 'public', 'data', 'tambola_hosting_tokens', tokenInput],
+                    ['artifacts', appId, 'public', 'data', 'hosting_tokens', tokenInput]
+                ];
+                for (const pathSegments of candidatePaths) {
                     try {
-                        await updateDoc(firestoreTokenRef, {
-                            usedCount: nextUsedCount,
-                            active: !shouldDeactivate,
-                            status: shouldDeactivate ? 'inactive' : 'active',
-                            lastUsedAt: Date.now()
-                        });
-                    } catch (e) {
-                        console.warn('Could not update Firestore token usage state:', e);
-                    }
+                        const tSnap = await getDoc(doc(db, ...pathSegments));
+                        if (tSnap.exists()) {
+                            const data = tSnap.data();
+                            if (isTokenDocInactive(data)) {
+                                showModal('❌', 'Inactive Host Token', 'This host token is inactive or expired.');
+                                return;
+                            }
+                            validTokenData = {
+                                maxTickets: data.maxTickets || 50,
+                                singleUse: Boolean(data.singleUse),
+                                ref: doc(db, ...pathSegments),
+                                usedCount: data.usedCount || 0
+                            };
+                            break;
+                        }
+                    } catch (e) {}
                 }
+            }
 
-                if (localTokenObj) {
-                    localTokenObj.usedCount = nextUsedCount;
-                    if (shouldDeactivate) {
-                        localTokenObj.active = false;
-                        localTokenObj.status = 'inactive';
-                    }
-                    saveHostingTokensDB();
+            const localTokenObj = hostingTokensDB.find(t => t.token === tokenInput);
+            if (!validTokenData) {
+                if (!localTokenObj || !localTokenObj.active) {
+                    showModal('❌', 'Invalid or Inactive Token', 'The host token entered is invalid, inactive, or has not been activated in the system.');
+                    return;
                 }
+                maxRoomTickets = localTokenObj.maxTickets || 50;
+                localTokenObj.usedCount = (localTokenObj.usedCount || 0) + 1;
+                if (localTokenObj.singleUse) {
+                    localTokenObj.active = false;
+                }
+                saveHostingTokensDB();
+            } else {
+                maxRoomTickets = validTokenData.maxTickets;
+                if (validTokenData.ref) {
+                    try {
+                        const updates = { usedCount: validTokenData.usedCount + 1 };
+                        if (validTokenData.singleUse) updates.active = false;
+                        await updateDoc(validTokenData.ref, updates);
+                    } catch (e) {}
+                }
+            }
 
-                isHost = true;
-                playerName = "Host";
-                roomCode = generateRoomCode();
-                roomRoster = [];
-                tickets = [];
+            isHost = true;
+            playerName = "Host";
+            roomCode = generateRoomCode();
+            activeHostTokenCode = tokenInput;
+            roomRoster = [];
+            tickets = [];
 
-                saveSessionState();
+            saveSessionState();
 
-                if (db) {
+            if (db) {
+                const btn = document.getElementById('btn-create-room');
+                try {
+                    btn.disabled = true;
                     btn.innerHTML = '<span>⏳ Creating Live Party...</span>';
+
                     const user = await ensureAuth();
                     const hostUid = (user && user.uid) ? user.uid : getOrCreateFallbackUid('host');
 
@@ -1049,6 +1016,9 @@
                         hostId: hostUid,
                         hostName: playerName,
                         hostToken: tokenInput,
+                        status: 'active',
+                        active: true,
+                        roomClosed: false,
                         maxRoomTickets: maxRoomTickets,
                         calledNumbers: [],
                         currentNumber: null,
@@ -1067,17 +1037,17 @@
                     });
 
                     subscribeToRoom(roomCode);
+                } catch (err) {
+                    console.error("Failed to create multiplayer Party:", err);
+                    showModal('⚠️', 'Multiplayer Sync Issue', `Could not connect to the live server (${err.message || 'Network/Storage blocked'}).`);
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>🚀 Start Hosting</span>';
                 }
-
-                enterGameRoomUI();
-                showModal('🎉', 'Party Successfully Created!', `Your new party has been successfully created!\nParty Code: ${roomCode}\nMax Tickets Allowed: ${maxRoomTickets}`);
-            } catch (err) {
-                console.error("Failed to create multiplayer Party:", err);
-                showModal('⚠️', 'Hosting Error', `Could not start hosting (${err.message || 'Please check your connection and try again'}).`);
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = '<span>🚀 Start Hosting</span>';
             }
+
+            enterGameRoomUI();
+            showModal('🎉', 'Party Successfully Created!', `Your new party has been successfully created!\nParty Code: ${roomCode}`);
         }
 
         async function joinExistingGame() {
@@ -1109,12 +1079,16 @@
 
                 if (!snap.exists()) {
                     showModal('❌', 'Party Not Found', `No active game found with code "${codeInput}". Double-check with your host.`);
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>🎯 Join Live party</span>';
                     return;
                 }
 
                 const roomData = snap.data();
-                if (roomData.roomClosed) {
-                    showModal('🚫', 'Party Permanently Closed', `Party "${codeInput}" has been ended and permanently closed by the host. It cannot be retrieved or rejoined.`);
+                if (isPartyDocInactive(roomData)) {
+                    showModal('🚫', 'Party Permanently Closed', `Party "${codeInput}" has been ended or is inactive.`);
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>🎯 Join Live party</span>';
                     return;
                 }
 
@@ -1125,6 +1099,8 @@
 
                 if (roomData.lockRoomNewPlayers && !isExistingHost) {
                     showModal('🔒', 'Party Locked', 'The host has locked this Party and is not allowing new players to join.');
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>🎯 Join Live party</span>';
                     return;
                 }
 
@@ -1132,6 +1108,7 @@
                     roomCode = codeInput;
                     isHost = true;
                     playerName = roomData.hostName || "Host";
+                    activeHostTokenCode = roomData.hostToken || null;
                     tickets = [];
 
                     saveSessionState();
@@ -1170,11 +1147,14 @@
 
                 if (currentTotalTickets + ticketCountInput > maxRoomTickets) {
                     showModal('⚠️', 'Ticket Capacity Reached', `This Party has a maximum capacity of ${maxRoomTickets} tickets. Joining would exceed the limit (${currentTotalTickets} already taken).`);
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>🎯 Join Live party</span>';
                     return;
                 }
 
                 roomCode = codeInput;
                 playerName = playerNameInput;
+                activeHostTokenCode = roomData.hostToken || null;
                 isHost = false;
 
                 tickets = [];
@@ -1208,9 +1188,6 @@
                 }
                 if (roomData.restrictOnePrizePerTicket !== undefined) {
                     restrictOnePrizePerTicket = roomData.restrictOnePrizePerTicket;
-                }
-                if (roomData.allowMultiTickets !== undefined) {
-                    allowMultiTickets = roomData.allowMultiTickets;
                 }
                 if (roomData.lockRoomNewPlayers !== undefined) {
                     lockRoomNewPlayers = roomData.lockRoomNewPlayers;
@@ -1253,13 +1230,13 @@
                     const snap = await getDoc(roomRef);
                     if (snap.exists()) {
                         const roomData = snap.data();
-                        
-                        if (roomData.roomClosed) {
+                        if (isPartyDocInactive(roomData)) {
                             clearSessionState();
                             roomCode = null;
                             return;
                         }
 
+                        activeHostTokenCode = roomData.hostToken || null;
                         maxRoomTickets = roomData.maxRoomTickets || 50;
                         calledNumbers = roomData.calledNumbers || [];
                         currentNumber = roomData.currentNumber || null;
@@ -1314,7 +1291,10 @@
 
                 if (roomSnap.exists()) {
                     const data = roomSnap.data();
-                    if (data.roomClosed && !isHost) return;
+                    if (isPartyDocInactive(data)) {
+                        forceCloseInactiveParty('Party Closed', 'The party status is now inactive. The party has been closed.');
+                        return;
+                    }
                     maxRoomTickets = data.maxRoomTickets || 50;
                     calledNumbers = data.calledNumbers || [];
                     currentNumber = data.currentNumber || null;
@@ -1353,20 +1333,125 @@
 
         async function forceRefreshRoomData(showFeedback = false) {
             if (!roomCode || !db) return;
+            const statusLabel = document.getElementById('sync-status-label');
             const refreshBtn = document.getElementById('btn-refresh-players');
+            if (statusLabel) statusLabel.textContent = 'Syncing...';
             if (refreshBtn) refreshBtn.disabled = true;
 
             try {
                 await ensureAuth();
                 await fetchRoomAndPlayersSnapshot(roomCode);
                 subscribeToRoom(roomCode);
+                if (statusLabel) statusLabel.textContent = 'Synced just now';
                 if (showFeedback) {
                     showModal('🔄', 'Synced', 'Room data and connected players list have been refreshed.');
                 }
             } catch (err) {
                 console.error("Force refresh error:", err);
+                if (statusLabel) statusLabel.textContent = 'Sync failed';
             } finally {
                 if (refreshBtn) refreshBtn.disabled = false;
+            }
+        }
+
+        function forceCloseInactiveParty(title, message) {
+            if (unsubscribeRoom) { unsubscribeRoom(); unsubscribeRoom = null; }
+            if (unsubscribePlayers) { unsubscribePlayers(); unsubscribePlayers = null; }
+            if (unsubscribeToken) { unsubscribeToken(); unsubscribeToken = null; }
+            if (statusMonitorInterval) { clearInterval(statusMonitorInterval); statusMonitorInterval = null; }
+            if (autoPlayInterval) { clearInterval(autoPlayInterval); autoPlayInterval = null; }
+
+            if (isHost && db && roomCode) {
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                    updateDoc(roomRef, {
+                        roomClosed: true,
+                        status: 'inactive',
+                        closedAt: Date.now(),
+                        hostToken: null
+                    }).catch(() => {});
+                } catch (e) {}
+            }
+
+            clearSessionState();
+            roomCode = null;
+            isHost = false;
+            activeHostTokenCode = null;
+            calledNumbers = [];
+            currentNumber = null;
+            tickets = [];
+            roomRoster = [];
+
+            document.getElementById('section-lobby').classList.remove('hidden');
+            ['host', 'board', 'player', 'players', 'prizex', 'claims'].forEach(t => {
+                const sec = document.getElementById(`section-${t}`);
+                if (sec) sec.classList.add('hidden');
+            });
+            document.getElementById('nav-tabs').classList.add('hidden');
+            document.getElementById('leave-room-btn').classList.add('hidden');
+            document.getElementById('audio-btn').classList.add('hidden');
+            document.getElementById('room-status-pill').innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span><span>Lobby / Setup</span>`;
+
+            showModal('🚫', title || 'Party Closed', message || 'This party has been closed because the Host Token or Party status became inactive.');
+        }
+
+        function isTokenDocInactive(tokenData) {
+            if (!tokenData) return false;
+            if (tokenData.active === false) return true;
+            if (typeof tokenData.status === 'string' && tokenData.status.toLowerCase() !== 'active') return true;
+            if (tokenData.expiresAt && Number(tokenData.expiresAt) < Date.now()) return true;
+            return false;
+        }
+
+        function isPartyDocInactive(roomData) {
+            if (!roomData) return true;
+            if (roomData.roomClosed === true) return true;
+            if (roomData.active === false) return true;
+            if (typeof roomData.status === 'string' && roomData.status.toLowerCase() !== 'active') return true;
+            return false;
+        }
+
+        async function verifyActivePartyAndTokenHealth() {
+            if (!db || !roomCode) return;
+            try {
+                const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                const roomSnap = await getDoc(roomRef);
+
+                if (!roomSnap.exists()) {
+                    forceCloseInactiveParty('Party Closed', 'This party no longer exists or has been closed.');
+                    return;
+                }
+
+                const roomData = roomSnap.data();
+                if (isPartyDocInactive(roomData)) {
+                    forceCloseInactiveParty('Party Closed', 'The party status is now inactive. The party has been closed.');
+                    return;
+                }
+
+                const tokenToCheck = (roomData.hostToken || activeHostTokenCode || '').trim().toUpperCase();
+                if (tokenToCheck) {
+                    activeHostTokenCode = tokenToCheck;
+                    const candidatePaths = [
+                        ['artifacts', appId, 'public', 'data', 'tambola_tokens', tokenToCheck],
+                        ['artifacts', appId, 'public', 'data', 'tambola_hosting_tokens', tokenToCheck],
+                        ['artifacts', appId, 'public', 'data', 'hosting_tokens', tokenToCheck]
+                    ];
+
+                    for (const pathSegments of candidatePaths) {
+                        try {
+                            const tSnap = await getDoc(doc(db, ...pathSegments));
+                            if (tSnap.exists()) {
+                                if (isTokenDocInactive(tSnap.data())) {
+                                    forceCloseInactiveParty('Party Closed', `The Host Token (${tokenToCheck}) is now inactive. This party has been closed.`);
+                                    return;
+                                }
+                                break;
+                            }
+                        } catch (e) {}
+                    }
+                }
+            } catch (err) {
+                console.warn("Periodic party/token health check warning:", err);
             }
         }
 
@@ -1374,33 +1459,25 @@
             if (!db || !code) return;
             if (unsubscribeRoom) unsubscribeRoom();
             if (unsubscribePlayers) unsubscribePlayers();
+            if (unsubscribeToken) unsubscribeToken();
+            if (statusMonitorInterval) clearInterval(statusMonitorInterval);
 
             const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', code);
             unsubscribeRoom = onSnapshot(roomRef, (snap) => {
-                if (!snap.exists()) return;
+                if (!snap.exists()) {
+                    forceCloseInactiveParty('Party Closed', 'This party has been removed or closed.');
+                    return;
+                }
                 const data = snap.data();
 
-                if (data.roomClosed && !isHost) {
-                    if (unsubscribeRoom) unsubscribeRoom();
-                    if (unsubscribePlayers) unsubscribePlayers();
-                    clearSessionState();
-                    roomCode = null;
-                    calledNumbers = [];
-                    currentNumber = null;
-                    tickets = [];
-                    roomRoster = [];
-
-                    document.getElementById('section-lobby').classList.remove('hidden');
-                    ['host', 'board', 'player', 'players', 'prizex', 'claims'].forEach(t => {
-                        const sec = document.getElementById(`section-${t}`);
-                        if (sec) sec.classList.add('hidden');
-                    });
-                    document.getElementById('nav-tabs').classList.add('hidden');
-                    document.getElementById('leave-room-btn').classList.add('hidden');
-                    document.getElementById('room-status-pill').innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span><span>Lobby / Setup</span>`;
-                    
-                    showModal('🚪', 'Host Left Room', 'The host has ended the game and closed the room.');
+                if (isPartyDocInactive(data)) {
+                    forceCloseInactiveParty('Party Closed', 'The party status has become inactive or was ended by the host.');
                     return;
+                }
+
+                if (data.hostToken && data.hostToken !== activeHostTokenCode) {
+                    activeHostTokenCode = data.hostToken;
+                    attachHostTokenListener(activeHostTokenCode);
                 }
 
                 const prevCurrent = currentNumber;
@@ -1448,6 +1525,30 @@
                 renderConnectedPlayers(roomRoster);
                 updateHostPrizeAndEligibilityMonitor();
             }, (err) => console.error("Players listener error:", err));
+
+            if (activeHostTokenCode) {
+                attachHostTokenListener(activeHostTokenCode);
+            }
+
+            statusMonitorInterval = setInterval(() => {
+                verifyActivePartyAndTokenHealth();
+            }, 15000);
+        }
+
+        function attachHostTokenListener(tokenCode) {
+            if (!db || !tokenCode) return;
+            if (unsubscribeToken) {
+                unsubscribeToken();
+                unsubscribeToken = null;
+            }
+            const cleanToken = tokenCode.trim().toUpperCase();
+            const tokenRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_tokens', cleanToken);
+            unsubscribeToken = onSnapshot(tokenRef, (snap) => {
+                if (!snap.exists()) return;
+                if (isTokenDocInactive(snap.data())) {
+                    forceCloseInactiveParty('Party Closed', `The Host Token (${cleanToken}) became inactive. The party has been closed.`);
+                }
+            }, (err) => console.warn("Host token listener warning:", err));
         }
 
         function enterGameRoomUI() {
@@ -1492,6 +1593,65 @@
             updateHostPrizeAndEligibilityMonitor();
             updateAllRoomUI();
         }
+        function renderConnectedPlayers(roster) {
+            const listEl = document.getElementById('connected-players-list');
+            const countEl = document.getElementById('player-roster-count');
+            const activeTicketsEl = document.getElementById('display-active-tickets');
+
+            const allParticipants = getAllParticipantsList(roster);
+            let totalActiveTickets = 0;
+
+            allParticipants.forEach(p => {
+                if (p.serializedTickets) {
+                    try {
+                        const parsed = JSON.parse(p.serializedTickets);
+                        totalActiveTickets += parsed.length;
+                    } catch (e) {
+                        totalActiveTickets += (p.ticketCount || 0);
+                    }
+                } else {
+                    totalActiveTickets += (p.ticketCount || 0);
+                }
+            });
+
+            if (activeTicketsEl) {
+                activeTicketsEl.textContent = `${totalActiveTickets} / ${maxRoomTickets}`;
+            }
+
+            if (!listEl) return;
+
+            if (countEl) countEl.textContent = allParticipants.length;
+
+            if (allParticipants.length === 0) {
+                listEl.innerHTML = `<span class="text-xs text-slate-500 italic">Waiting for players to join...</span>`;
+                return;
+            }
+
+            listEl.innerHTML = allParticipants.map(p => {
+                let parsedTickets = [];
+                if (p.serializedTickets) {
+                    try {
+                        parsedTickets = JSON.parse(p.serializedTickets);
+                    } catch (e) {
+                        parsedTickets = [];
+                    }
+                }
+                const ticketCount = parsedTickets.length;
+                const ticketNames = parsedTickets.map(t => t.name);
+                const ticketNamesStr = ticketNames.length > 0 ? `• "${ticketNames.join('", "')}"` : '';
+
+                return `
+                    <div class="bg-slate-900/80 border border-slate-700/60 rounded-xl px-3 py-2 flex items-center justify-between gap-2 text-xs">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                            <span class="font-bold text-white">${escapeHtml(p.name || 'Player')}</span>
+                            <span class="text-slate-400 truncate max-w-[200px]">${escapeHtml(ticketNamesStr)}</span>
+                        </div>
+                        <span class="px-2 py-0.5 rounded bg-slate-800 text-indigo-300 font-semibold border border-slate-700">${ticketCount} ticket${ticketCount === 1 ? '' : 's'}</span>
+                    </div>
+                `;
+            }).join('');
+        }
 
         function switchTab(tab) {
             ['host', 'board', 'player', 'players', 'prizex', 'claims'].forEach(t => {
@@ -1532,22 +1692,6 @@
             renderPlayerTickets();
             updateClaimsUI();
             updateAddTicketButtonUI();
-
-            const displayActiveTicketsEl = document.getElementById('display-active-tickets');
-            if (displayActiveTicketsEl) {
-                let totalActiveTickets = 0;
-                const allParticipants = getAllParticipantsList(roomRoster);
-                allParticipants.forEach(p => {
-                    if (p.serializedTickets) {
-                        try {
-                            const parsed = JSON.parse(p.serializedTickets);
-                            totalActiveTickets += parsed.length;
-                        } catch (e) {}
-                    }
-                });
-                displayActiveTicketsEl.textContent = `${totalActiveTickets} / ${maxRoomTickets}`;
-            }
-
             if (isHost && !document.getElementById('section-players').classList.contains('hidden')) {
                 renderAllPlayersRosterTab();
             }
@@ -1753,7 +1897,7 @@
                     </div>
                 `;
             }).join('');
-            if (claimedCountEl) claimedCountEl.textContent = `${claimedTotal} / ${prizeOrder.length}`;
+            claimedCountEl.textContent = `${claimedTotal} / ${prizeOrder.length}`;
 
             const participants = [];
             roomRoster.forEach(p => {
@@ -1776,7 +1920,7 @@
             participants.forEach(player => {
                 (player.tickets || []).forEach(tkt => {
                     if (!tkt || !tkt.grid) return;
-                    
+
                     const alreadyWonThisTicket = restrictOnePrizePerTicket && Object.values(claimsStatus).some(claim => claim && claim.ticketId === tkt.id);
                     if (alreadyWonThisTicket) return;
 
@@ -1792,7 +1936,7 @@
                 });
             });
 
-            if (eligibleCountEl) eligibleCountEl.textContent = eligibleItems.length;
+            eligibleCountEl.textContent = eligibleItems.length;
             if (eligibleItems.length === 0) {
                 eligibleListEl.innerHTML = `<p class="text-xs text-slate-500 italic">No tickets eligible for unclaimed prizes yet...</p>`;
             } else {
@@ -1930,8 +2074,10 @@
         }
 
         async function executeLeaveRoom() {
-            if (unsubscribeRoom) unsubscribeRoom();
-            if (unsubscribePlayers) unsubscribePlayers();
+            if (unsubscribeRoom) { unsubscribeRoom(); unsubscribeRoom = null; }
+            if (unsubscribePlayers) { unsubscribePlayers(); unsubscribePlayers = null; }
+            if (unsubscribeToken) { unsubscribeToken(); unsubscribeToken = null; }
+            if (statusMonitorInterval) { clearInterval(statusMonitorInterval); statusMonitorInterval = null; }
 
             const wasHost = isHost;
             if (isHost && db && roomCode) {
@@ -1939,6 +2085,7 @@
                     const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
                     await updateDoc(roomRef, {
                         roomClosed: true,
+                        status: 'inactive',
                         closedAt: Date.now(),
                         hostToken: null
                     });
@@ -1959,6 +2106,7 @@
             clearSessionState();
             roomCode = null;
             isHost = false;
+            activeHostTokenCode = null;
             calledNumbers = [];
             currentNumber = null;
             tickets = [];
@@ -2003,8 +2151,6 @@
                     : 'All Party data and session details have been refreshed and cleared.'
             );
         }
-
-        window.executeLeaveRoom = executeLeaveRoom;
 
         function showModal(icon, title, message) {
             const modal = document.getElementById('custom-modal');
@@ -2330,26 +2476,6 @@
             }
             speakNumber(currentNumber);
             updateAllRoomUI();
-        }
-
-        function renderConnectedPlayers(roster) {
-            const displayActiveTicketsEl = document.getElementById('display-active-tickets');
-
-            const allParticipants = getAllParticipantsList(roster);
-
-            let totalActiveTickets = 0;
-            allParticipants.forEach(p => {
-                if (p.serializedTickets) {
-                    try {
-                        const parsed = JSON.parse(p.serializedTickets);
-                        totalActiveTickets += parsed.length;
-                    } catch (e) {}
-                }
-            });
-
-            if (displayActiveTicketsEl) {
-                displayActiveTicketsEl.textContent = `${totalActiveTickets} / ${maxRoomTickets}`;
-            }
         }
 
         function updatePlayerCalledStripUI() {
@@ -2928,6 +3054,7 @@
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible' && roomCode && db) {
                 forceRefreshRoomData(false);
+                verifyActivePartyAndTokenHealth();
             }
         });
 
