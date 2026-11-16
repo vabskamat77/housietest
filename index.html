@@ -971,7 +971,7 @@
                                     try {
                                         const existingRoomSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', data.activeRoomCode));
                                         if (existingRoomSnap.exists() && !isPartyDocInactive(existingRoomSnap.data())) {
-                                            showModal('⚠️', 'Single-Use Token In Use', `This single-use token is already hosting an active party (${data.activeRoomCode}). Only one party can be hosted at a time with this token.`);
+                                            showModal('⚠️', 'Party already active for this token', `Party already active for this token (${data.activeRoomCode}). Only one party can be hosted at a time with this token.`);
                                             return;
                                         }
                                     } catch (e) {}
@@ -988,7 +988,7 @@
                                         }
                                     });
                                     if (activeConcurrentRoom) {
-                                        showModal('⚠️', 'Single-Use Token In Use', `This single-use token is already hosting an active party (${activeConcurrentRoom}). Only one party can be hosted at a time with this token.`);
+                                        showModal('⚠️', 'Party already active for this token', `Party already active for this token (${activeConcurrentRoom}). Only one party can be hosted at a time with this token.`);
                                         return;
                                     }
                                 } catch (e) {}
@@ -1025,7 +1025,7 @@
                             }
                         });
                         if (activeConcurrentRoom) {
-                            showModal('⚠️', 'Single-Use Token In Use', `This single-use token is already hosting an active party (${activeConcurrentRoom}). Only one party can be hosted at a time with this token.`);
+                            showModal('⚠️', 'Party already active for this token', `Party already active for this token (${activeConcurrentRoom}). Only one party can be hosted at a time with this token.`);
                             return;
                         }
                     } catch (e) {}
