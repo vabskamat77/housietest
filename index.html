@@ -1399,7 +1399,8 @@
                 const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
                 if (!raw) return;
                 const session = JSON.parse(raw);
-                if (!session || !session.roomCode || !session.tickets || session.tickets.length === 0) return;
+                if (!session || !session.roomCode) return;
+                if (!session.isHost && (!session.tickets || session.tickets.length === 0)) return;
 
                 if (Date.now() - session.savedAt > 12 * 3600 * 1000) {
                     clearSessionState();
@@ -1410,7 +1411,7 @@
                 isHost = session.isHost;
                 playerName = session.playerName;
                 maxRoomTickets = session.maxRoomTickets || 50;
-                tickets = session.tickets;
+                tickets = session.tickets || [];
                 isAutoMarkEnabled = session.isAutoMarkEnabled ?? true;
 
                 if (db) {
@@ -1525,27 +1526,28 @@
                 await ensureAuth();
                 await fetchRoomAndPlayersSnapshot(roomCode);
                 subscribeToRoom(roomCode);
-                if (statusLabel) {
-                    const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                    statusLabel.textContent = showFeedback ? `Synced ${nowStr}` : 'Live sync enabled';
+                if (statusLabel) statusLabel.textContent = 'Synced just now';
+                if (showFeedback) {
+                    showModal('🔄', 'Synced', 'Room data and connected players list have been refreshed.');
                 }
+            } catch (err) {
+                console.error("Force refresh error:", err);
+                if (statusLabel) statusLabel.textContent = 'Sync failed';
             } finally {
                 if (refreshBtn) refreshBtn.disabled = false;
             }
         }
 
         function subscribeToRoom(code) {
-            if (!db) return;
+            if (!db || !code) return;
             if (unsubscribeRoom) unsubscribeRoom();
             if (unsubscribePlayers) unsubscribePlayers();
-
-            fetchRoomAndPlayersSnapshot(code);
 
             const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', code);
             unsubscribeRoom = onSnapshot(roomRef, (snap) => {
                 if (!snap.exists()) return;
                 const data = snap.data();
-                
+
                 if (data.roomClosed && !isHost) {
                     if (unsubscribeRoom) unsubscribeRoom();
                     if (unsubscribePlayers) unsubscribePlayers();
@@ -1554,11 +1556,17 @@
                     calledNumbers = [];
                     currentNumber = null;
                     tickets = [];
+                    roomRoster = [];
 
                     document.getElementById('section-lobby').classList.remove('hidden');
-                    ['host', 'player', 'players', 'claims'].forEach(t => document.getElementById(`section-${t}`).classList.add('hidden'));
+                    ['host', 'board', 'player', 'players', 'prizex', 'claims'].forEach(t => {
+                        const sec = document.getElementById(`section-${t}`);
+                        if (sec) sec.classList.add('hidden');
+                    });
                     document.getElementById('nav-tabs').classList.add('hidden');
                     document.getElementById('leave-room-btn').classList.add('hidden');
+                    const ownerPortalBtn = document.getElementById('owner-portal-btn');
+                    if (ownerPortalBtn) ownerPortalBtn.classList.remove('hidden');
                     document.getElementById('room-status-pill').innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span><span>Lobby / Setup</span>`;
                     
                     showModal('🚪', 'Host Left Room', 'The host has ended the game and closed the room.');
