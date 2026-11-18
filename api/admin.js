@@ -36,8 +36,22 @@ export default async function handler(req,res) {
   const match=/^Bearer (.+)$/.exec(req.headers.authorization||'');
   if (!match) return send(res,401,{error:'Sign in required'});
   let identity;
-  try { identity=await getAuth().verifyIdToken(match[1],true); }
-  catch { return send(res,401,{error:'Invalid or expired login'}); }
+  try {
+  // Ensure Firebase Admin is initialized before verifying login.
+  getDb();
+
+  identity = await getAuth().verifyIdToken(match[1], true);
+} catch (err) {
+  console.error(
+    'Firebase admin verification error:',
+    err.code || err.name,
+    err.message
+  );
+
+  return send(res, 401, {
+    error: 'Invalid or expired login'
+  });
+}
   if (!allowedUids.includes(identity.uid) || identity.firebase?.sign_in_provider==='anonymous') return send(res,403,{error:'Administrator access denied'});
   const db=getDb();
   try {
