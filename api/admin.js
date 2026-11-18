@@ -91,21 +91,80 @@ identity = await getAuth(firebaseApp)
       await audit(db,identity.uid,action,token,{maxTickets,singleUse});
       return send(res,201,{ok:true,token});
     }
-    if (action==='remove-token') {
-      const token=String(body.token||'').trim().toUpperCase();
-      if (!tokenPattern.test(token)) return send(res,400,{error:'Invalid token'});
-      const ref=tokens(db).doc(token);
-      await db.runTransaction(async tx=>{
-        const snap=await tx.get(ref);
-        if (!snap.exists) throw Object.assign(new Error('Token not found'),{status:404});
-        const t=snap.data();
-        if (t.activeRoomCode || t.inUse) throw Object.assign(new Error('Close the active party before removing this token'),{status:409});
-        // Archive rather than delete: preserve Stripe/payment evidence and audit history.
-        tx.update(ref,{hiddenFromAdmin:true,active:false,status:'revoked',inUse:false,removedAt:stamp(),removedBy:identity.uid});
-      });
-      await audit(db,identity.uid,action,token);
-      return send(res,200,{ok:true});
+    
+if (action === 'remove-token') {
+  const token = String(body.token || '')
+    .trim()
+    .toUpperCase();
+
+  if (!tokenPattern.test(token)) {
+    return send(res, 400, {
+      error: 'Invalid token'
+    });
+  }
+
+  const tokenRef = tokens(db).doc(token);
+
+  await db.runTransaction(async tx => {
+    const tokenSnap = await tx.get(tokenRef);
+
+    if (!tokenSnap.exists) {
+      throw Object.assign(
+        new Error('Token not found'),
+        { status: 404 }
+      );
     }
+
+    const tokenData = tokenSnap.data();
+    const roomCode = tokenData.activeRoomCode;
+
+    // Check actual room status, not just the
+    // token's possibly outdated inUse flag.
+    if (roomCode) {
+      const roomRef = rooms(db).doc(roomCode);
+      const roomSnap = await tx.get(roomRef);
+
+      if (roomSnap.exists) {
+        const room = roomSnap.data();
+
+        const isActive =
+          room.roomClosed !== true &&
+          room.active === true &&
+          room.status === 'active';
+
+        if (isActive) {
+          throw Object.assign(
+            new Error(
+              'This token still has an active party. ' +
+              'Close the party before removing it.'
+            ),
+            { status: 409 }
+          );
+        }
+      }
+    }
+
+    // No active party remains.
+    // Clear stale token associations and archive.
+    tx.update(tokenRef, {
+      activeRoomCode: null,
+      inUse: false,
+      hiddenFromAdmin: true,
+      active: false,
+      status: 'revoked',
+      removedAt: stamp(),
+      removedBy: identity.uid
+    });
+  });
+
+  await audit(db, identity.uid, action, token);
+
+  return send(res, 200, {
+    ok: true,
+    message: 'Host Token removed from Admin Portal.'
+  });
+}
+
     if (action==='revoke-token' || action==='activate-token') {
       const token=String(body.token||'').toUpperCase();
       if (!tokenPattern.test(token)) return send(res,400,{error:'Invalid token'});
