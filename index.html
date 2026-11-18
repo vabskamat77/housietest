@@ -1087,8 +1087,8 @@ async function registerTicketWithServer(roomCode, playerName, action = 'join') {
         }
 
         async function createMultiplayerGame(offlineMode) {
-            
-const user = await ensureAuth();
+     try {       
+          const user = await ensureAuth();
 
 if (!auth?.currentUser || user.isFallback) {
   throw new Error(
@@ -1124,7 +1124,7 @@ const response = await fetch(
                     maxTickets: maxRoomTickets,
                     singleUse: isSingleUseToken
                 };
-            } catch (err) {
+             catch (err) {
                 showModal('❌', 'Host Token Could Not Be Activated', err.message || 'The secure token service could not validate this token.');
                 btn.disabled = false;
                 btn.innerHTML = '<span>🚀 Start Hosting</span>';
