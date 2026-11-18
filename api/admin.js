@@ -39,10 +39,8 @@ export default async function handler(req,res) {
   
 try {
   
-const db = getDb();
 
-
-const db = getDb();
+getDb(); // Initialize Firebase Admin if needed.
 
 const { getApps } = await import('firebase-admin/app');
 const { getAuth } = await import('firebase-admin/auth');
