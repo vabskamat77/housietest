@@ -83,6 +83,13 @@ export default async function handler(req, res) {
       }
 
       const room = roomSnap.data();
+      
+if (room.ticketMode !== 'server') {
+  throw new Error(
+    'This Party uses the previous ticket system. ' +
+    'Please create a new Party to use secure tickets.'
+  );
+}
 // Prevent new ticket issuance after the game begins.
 const gameHasStarted =
   Array.isArray(room.calledNumbers) &&
