@@ -722,26 +722,50 @@ async function registerTicketWithServer(roomCode, playerName, action = 'join') {
             }
         }
 
-        async function ensureAuth() {
-            if (currentUser && currentUser.uid) return currentUser;
-            if (!auth) {
-                currentUser = { uid: getOrCreateFallbackUid('guest'), isFallback: true };
-                return currentUser;
-            }
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    const cred = await signInWithCustomToken(auth, __initial_auth_token);
-                    currentUser = cred.user;
-                } else {
-                    const cred = await signInAnonymously(auth);
-                    currentUser = cred.user;
-                }
-            } catch (err) {
-                console.warn("Firebase Auth fallback triggered:", err);
-                currentUser = { uid: getOrCreateFallbackUid('host'), isFallback: true };
-            }
+        
+async function ensureAuth() {
+    if (!auth) {
+        throw new Error(
+            'Firebase Auth failed to initialize. Check Firebase configuration.'
+        );
+    }
+
+    try {
+        await auth.authStateReady();
+
+        if (auth.currentUser) {
+            currentUser = auth.currentUser;
             return currentUser;
         }
+
+        let credential;
+
+        if (
+            typeof __initial_auth_token !== 'undefined' &&
+            __initial_auth_token
+        ) {
+            credential = await signInWithCustomToken(
+                auth,
+                __initial_auth_token
+            );
+        } else {
+            credential = await signInAnonymously(auth);
+        }
+
+        currentUser = credential.user;
+        return currentUser;
+
+    } catch (err) {
+        console.error('Firebase authentication failed:', err);
+
+        currentUser = null;
+
+        throw new Error(
+            `Firebase sign-in failed (${err.code || 'unknown'}): ${err.message}`
+        );
+    }
+}
+
 
         const tambolaNicknames = {
             1: "Top of the house / One", 2: "Kaala Dhan / Duck", 3: "Economy Six / Dilwala", 4: "Murgi / Four", 5: "Panchhi / Hand", 6: "Sixer / Cabinet", 7: "Lucky Seven", 8: "Garden Gate", 9: "Doctor's Time", 10: "A Reel / Ten",
