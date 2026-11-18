@@ -1,0 +1,3213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tambola / Housie Online - Multiplayer Live</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Poppins', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        @keyframes pulse-subtle {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        .animate-pulse-subtle {
+            animation: pulse-subtle 2s infinite ease-in-out;
+        }
+        .board-number {
+            transition: all 0.2s ease;
+        }
+        .ticket-cell {
+            transition: all 0.15s ease;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans selection:bg-indigo-500 selection:text-white">
+
+    <!-- Header Navigation -->
+    <header class="bg-slate-800/90 backdrop-blur border-b border-slate-700 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-3">
+            <div class="flex items-center space-x-3">
+                <div onclick="returnToLobbyConfirm()" class="cursor-pointer bg-gradient-to-tr from-emerald-600 to-teal-500 text-white p-2 rounded-xl shadow-lg font-extrabold text-lg sm:text-xl tracking-wider flex items-center gap-1.5">
+                    <span>🎲</span>
+                    <span>TAMBOLA</span>
+                </div>
+                <div>
+                    <h1 class="font-bold text-base sm:text-lg leading-tight text-white">Housie Master Live</h1>
+                    <div id="room-status-pill" class="text-xs text-slate-400 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                        <span>Lobby / Setup</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View Switcher Tabs (Visible when in a Party) -->
+            <div id="nav-tabs" class="hidden flex bg-slate-900 p-1 rounded-xl border border-slate-700">
+                <button onclick="switchTab('host')" id="tab-host" class="hidden px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all bg-emerald-600 text-white shadow">
+                    Host Board
+                </button>
+                <button onclick="switchTab('board')" id="tab-board" class="hidden px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all text-slate-400 hover:text-white">
+                    Master Board
+                </button>
+                <button onclick="switchTab('player')" id="tab-player" class="hidden px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all text-slate-400 hover:text-white">
+                    My Tickets (<span id="ticket-count-badge">0</span>)
+                </button>
+                <button onclick="switchTab('players')" id="tab-players" class="hidden px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all text-slate-400 hover:text-white">
+                    Players & Tickets
+                </button>
+                <button onclick="switchTab('prizex')" id="tab-prizex" class="hidden px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all text-slate-400 hover:text-white">
+                    Prizes & Winners
+                </button>
+                <button onclick="switchTab('claims')" id="tab-claims" class="hidden px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all text-slate-400 hover:text-white">
+                    Claim Prizes
+                </button>
+            </div>
+
+            <!-- Global Controls -->
+            <div class="flex items-center space-x-2">
+                <button onclick="toggleAudio()" id="audio-btn" class="hidden p-2 sm:p-2.5 bg-slate-700 hover:bg-slate-600 rounded-xl text-slate-200 transition text-sm flex items-center space-x-1" title="Toggle Voice Callout">
+                    <span id="audio-icon">🔇</span>
+                    <span class="hidden sm:inline text-xs font-medium">Sound</span>
+                </button>
+                <button id="leave-room-btn" onclick="returnToLobbyConfirm()" class="hidden p-2 sm:p-2.5 bg-slate-700 hover:bg-rose-900/60 text-slate-300 hover:text-rose-200 border border-slate-600 rounded-xl transition text-xs font-semibold">
+                    🚪 Leave Party
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-4 py-6">
+
+        <!-- ================= 1. LANDING / LOBBY SCREEN ================= -->
+        <div id="section-lobby" class="max-w-4xl mx-auto space-y-6">
+            <div class="text-center space-y-2 py-2">
+                <span class="inline-block px-3 py-1 rounded-full bg-emerald-900/50 border border-emerald-500/30 text-emerald-300 text-xs font-semibold tracking-wide uppercase">
+                    Real-Time Multiplayer Housie
+                </span>
+                <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                    Play Tambola Online with Friends
+                </h2>
+                <p class="text-xs sm:text-sm text-slate-400 max-w-xl mx-auto">
+                    Host a live Party with an automated voice caller board, or join an existing game using a 6-character code or invite link.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <!-- Host a New Game Card -->
+                <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-5 shadow-xl flex flex-col justify-between space-y-4">
+                    <div class="space-y-3">
+                        <div class="flex items-start space-x-3">
+                            <div class="w-10 h-10 rounded-xl bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-xl flex-shrink-0">
+                                🎙️
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-bold text-white leading-tight">Host a new Party</h3>
+                                <p class="text-[11px] text-slate-400 mt-0.5">Create a live Party and share invite link.</p>
+                            </div>
+                        </div>
+
+                        <!-- Free token promotion banner -->
+                        <div class="bg-emerald-950/60 border border-emerald-500/40 p-2.5 rounded-xl text-xs space-y-0.5">
+                            <div class="font-bold text-emerald-300 text-[11px]">🎉 Free Hosting Promotion</div>
+                            <p class="text-slate-300 text-[11px]">Play for free up to 10 tickets - Use Token: <code class="text-amber-300 font-mono font-bold whitespace-nowrap select-all">HOST-2026-FP10</code></p>
+                        </div>
+
+                        <div class="space-y-2.5 pt-1">
+                            <div>
+                                <label class="block text-[11px] font-semibold text-amber-300 mb-1">Host Token (Required)</label>
+                                <input type="text" id="host-token-input" placeholder="e.g., HOST-2026-FP10" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-bold tracking-wider text-amber-400 focus:outline-none focus:border-emerald-500 uppercase">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-1">
+                        <button onclick="createMultiplayerGame(false)" id="btn-create-room" class="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl shadow-lg transition transform active:scale-98 flex items-center justify-center gap-2 text-sm">
+                            <span>🚀 Start Hosting</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Join an Existing Game Card -->
+                <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-5 shadow-xl flex flex-col justify-between space-y-4">
+                    <div class="space-y-3">
+                        <div class="flex items-start space-x-3">
+                            <div class="w-10 h-10 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-xl flex-shrink-0">
+                                🎟️
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-bold text-white leading-tight">Join an existing party</h3>
+                                <p class="text-[11px] text-slate-400 mt-0.5">Enter 6-char Party Code provided by your host to start playing (1 Ticket)</p>
+                            </div>
+                        </div>
+
+                        <div class="space-y-2.5 pt-1">
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-300 mb-1">6-Char Party Code</label>
+                                <input type="text" id="join-room-code" maxlength="6" placeholder="e.g., AB12CD" oninput="this.value = this.value.toUpperCase()" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-bold tracking-widest uppercase text-amber-400 focus:outline-none focus:border-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-300 mb-1">Your Player Name</label>
+                                <input type="text" id="join-player-name" placeholder="e.g., Priya" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-1">
+                        <button onclick="joinExistingGame()" id="btn-join-room" class="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold rounded-xl shadow-lg transition transform active:scale-98 flex items-center justify-center gap-2 text-sm">
+                            <span>🎯 Join Live party</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ticket Packages Purchase Options -->
+            <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-5 shadow-xl space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <h3 class="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                            <span>💎 Need More Than 10 Tickets?</span>
+                        </h3>
+                        <p class="text-[11px] text-slate-400">Upgrade your party capacity with a single-use Host Token.</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <!-- STARTER -->
+                    <div class="bg-slate-900/90 border border-slate-700 hover:border-emerald-500/50 rounded-xl p-4 flex flex-col justify-between space-y-3 transition">
+                        <div class="space-y-1">
+                            <span class="inline-block px-2 py-0.5 rounded bg-emerald-900/50 text-emerald-300 text-[10px] font-bold tracking-wider uppercase">STARTER</span>
+                            <div class="text-2xl font-extrabold text-white">$1.99 CAD</div>
+                            <div class="text-xs font-semibold text-slate-300">25 Tickets</div>
+                        </div>
+                        <button onclick="promptBuyTicketPackage('STARTER', 25, '$1.99 CAD')" class="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs transition shadow">
+                            Buy STARTER
+                        </button>
+                    </div>
+
+                    <!-- STANDARD -->
+                    <div class="bg-slate-900/90 border border-amber-500/40 hover:border-amber-400 rounded-xl p-4 flex flex-col justify-between space-y-3 transition relative">
+                        <div class="space-y-1">
+                            <div class="flex items-center justify-between">
+                                <span class="inline-block px-2 py-0.5 rounded bg-amber-900/50 text-amber-300 text-[10px] font-bold tracking-wider uppercase">STANDARD</span>
+                                <span class="text-[10px] font-bold text-amber-400 uppercase">Popular</span>
+                            </div>
+                            <div class="text-2xl font-extrabold text-white">$2.99 CAD</div>
+                            <div class="text-xs font-semibold text-slate-300">50 Tickets</div>
+                        </div>
+                        <button onclick="promptBuyTicketPackage('STANDARD', 50, '$2.99 CAD')" class="w-full py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-bold rounded-xl text-xs transition shadow">
+                            Buy STANDARD
+                        </button>
+                    </div>
+
+                    <!-- MEGA -->
+                    <div class="bg-slate-900/90 border border-slate-700 hover:border-indigo-500/50 rounded-xl p-4 flex flex-col justify-between space-y-3 transition">
+                        <div class="space-y-1">
+                            <span class="inline-block px-2 py-0.5 rounded bg-indigo-900/50 text-indigo-300 text-[10px] font-bold tracking-wider uppercase">MEGA</span>
+                            <div class="text-2xl font-extrabold text-white">$4.99 CAD</div>
+                            <div class="text-xs font-semibold text-slate-300">100 Tickets</div>
+                        </div>
+                        <button onclick="promptBuyTicketPackage('MEGA', 100, '$4.99 CAD')" class="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold rounded-xl text-xs transition shadow">
+                            Buy MEGA
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= 2. HOST BOARD SECTION ================= -->
+        <div id="section-host" class="hidden space-y-6">
+            <!-- Share & Party Info Banner -->
+            <div id="host-share-banner" class="bg-gradient-to-r from-slate-800 via-slate-800 to-emerald-950/50 border border-emerald-500/30 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                <div class="flex flex-wrap items-center gap-4">
+                    <div class="bg-slate-900 border border-emerald-500/40 px-4 py-2.5 rounded-xl">
+                        <div class="text-[10px] uppercase tracking-wider text-emerald-400 font-bold">Party Code</div>
+                        <div id="display-room-code" class="text-2xl sm:text-3xl font-black tracking-widest text-amber-400 select-all">------</div>
+                    </div>
+                    <div class="bg-slate-900 border border-emerald-500/40 px-4 py-2.5 rounded-xl">
+                        <div class="text-[10px] uppercase tracking-wider text-emerald-400 font-bold">Active Tickets</div>
+                        <div id="display-active-tickets" class="text-xl sm:text-2xl font-black tracking-wider text-emerald-400">0 / 50</div>
+                    </div>
+                    <div>
+                        <h3 class="text-sm sm:text-base font-bold text-white">Invite Players to Join</h3>
+                        <p class="text-xs text-slate-300">Share the 6-character code or click below to copy the direct invite link.</p>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+                    <button onclick="copyRoomCode()" class="flex-1 sm:flex-initial px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs sm:text-sm font-semibold rounded-xl transition flex items-center justify-center gap-1.5">
+                        <span>📋 Copy Party Code</span>
+                    </button>
+                    <button onclick="copyInviteLink()" class="flex-1 sm:flex-initial px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-semibold rounded-xl shadow transition flex items-center justify-center gap-1.5">
+                        <span>🔗 Copy Invite Link</span>
+                    </button>
+                    <button onclick="copyShareMessage()" class="flex-1 sm:flex-initial px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs sm:text-sm font-semibold rounded-xl transition flex items-center justify-center gap-1.5">
+                        <span>💬 Copy WhatsApp Invite</span>
+                    </button>
+                    <button onclick="confirmResetRoomNumbers()" class="px-3.5 py-2.5 bg-rose-900/40 hover:bg-rose-900/60 text-rose-300 border border-rose-700/50 rounded-xl transition text-xs font-semibold">
+                        🔄 Reset Board
+                    </button>
+                </div>
+            </div>
+
+            <!-- Caller Display & Controls -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Current Number Hero Card -->
+                <div class="lg:col-span-1 bg-gradient-to-br from-slate-800 to-slate-800/90 border border-slate-700 rounded-2xl p-6 shadow-xl flex flex-col justify-between relative overflow-hidden">
+                    <div class="absolute -right-10 -bottom-10 text-slate-700/20 font-black text-9xl pointer-events-none select-none">#</div>
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-xs uppercase tracking-wider text-emerald-400 font-bold">Current Called Number</span>
+                            <span id="numbers-remaining" class="text-xs bg-slate-700 px-2.5 py-1 rounded-full text-slate-300 font-medium">90 remaining</span>
+                        </div>
+                        <div class="text-center my-5">
+                            <div id="current-number-display" class="inline-flex items-center justify-center w-32 h-32 sm:w-36 sm:h-36 bg-gradient-to-tr from-emerald-600 to-teal-500 rounded-3xl shadow-2xl text-5xl sm:text-6xl font-black text-white border-4 border-slate-700/50 animate-pulse-subtle">
+                                --
+                            </div>
+                            <div id="number-nickname" class="mt-4 text-amber-300 font-semibold text-sm min-h-[24px]">
+                                Press "Draw Next Number" to start!
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="space-y-3 mt-2">
+                        <div class="grid grid-cols-12 gap-2">
+                            <button onclick="drawNumber()" id="draw-btn" class="col-span-8 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl shadow-lg transition transform active:scale-95 flex items-center justify-center space-x-2 text-sm sm:text-base">
+                                <span>🎲 Draw Next</span>
+                            </button>
+                            <button onclick="undrawLastNumber()" id="undraw-btn" class="col-span-4 py-3.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold rounded-xl shadow transition flex items-center justify-center gap-1 text-xs sm:text-sm" title="Undo Last Called Number">
+                                <span>↩️</span>
+                                <span>Back</span>
+                            </button>
+                        </div>
+                        <!-- Manual Number Entry -->
+                        <div class="flex gap-2">
+                            <input type="number" id="manual-number-input" min="1" max="90" placeholder="Enter 1-90" onkeydown="if(event.key==='Enter') callManualNumber()" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm font-bold text-amber-300 placeholder-slate-500 focus:outline-none focus:border-emerald-500">
+                            <button onclick="callManualNumber()" class="px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold rounded-xl text-xs sm:text-sm transition whitespace-nowrap shadow">
+                                ✍️ Call #
+                            </button>
+                        </div>
+                        <div class="grid grid-cols-12 gap-2">
+                            <button onclick="toggleAutoPlay()" id="autoplay-btn" class="col-span-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded-xl text-xs sm:text-sm transition flex items-center justify-center space-x-1">
+                                <span id="autoplay-icon">▶️</span>
+                                <span id="autoplay-text">Auto</span>
+                            </button>
+                            <select id="autoplay-speed" onchange="updateAutoPlaySpeed()" class="col-span-4 px-2 py-2.5 bg-slate-900 border border-slate-700 text-slate-200 font-semibold rounded-xl text-xs text-center">
+                                <option value="3000">3s</option>
+                                <option value="5000" selected>5s</option>
+                                <option value="8000">8s</option>
+                                <option value="10000">10s</option>
+                            </select>
+                            <button onclick="repeatCall()" class="col-span-3 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded-xl text-xs sm:text-sm transition flex items-center justify-center" title="Repeat Callout">
+                                <span>🔁</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Called History & Connected Players -->
+                <div class="lg:col-span-2 bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl flex flex-col justify-between space-y-5">
+                    <div>
+                        <div class="flex justify-between items-center mb-3">
+                            <h2 class="text-base sm:text-lg font-bold text-white flex items-center space-x-2">
+                                <span>📊 Recent Called Numbers (Last 50)</span>
+                            </h2>
+                            <span id="total-called-count" class="text-xs text-slate-300 bg-slate-900 px-3 py-1 rounded-lg border border-slate-700">Called: 0 / 90</span>
+                        </div>
+                        <div id="recent-numbers-strip" class="flex flex-wrap gap-2 py-2 max-h-40 overflow-y-auto items-center">
+                            <span class="text-xs text-slate-500 italic px-2">No numbers called yet...</span>
+                        </div>
+                    </div>
+
+                    <!-- Quick Stats -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+                        <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-700/50 text-center">
+                            <div class="text-[11px] text-slate-400">Latest</div>
+                            <div id="stat-last" class="text-lg font-bold text-emerald-400">--</div>
+                        </div>
+                        <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-700/50 text-center">
+                            <div class="text-[11px] text-slate-400">Progress</div>
+                            <div id="stat-progress" class="text-lg font-bold text-amber-400">0%</div>
+                        </div>
+                        <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-700/50 text-center">
+                            <div class="text-[11px] text-slate-400">Odd / Even</div>
+                            <div id="stat-odd-even" class="text-lg font-bold text-indigo-400">--</div>
+                        </div>
+                        <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-700/50 text-center">
+                            <div class="text-[11px] text-slate-400">Range</div>
+                            <div id="stat-decade" class="text-lg font-bold text-teal-400">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Host Live Prize & Eligibility Monitor -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Live Eligible Tickets Alert Box -->
+                <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-xl space-y-3">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-sm sm:text-base font-bold text-amber-300 flex items-center gap-2">
+                            <span>⚡ Eligible Tickets (Unclaimed Prizes)</span>
+                        </h3>
+                        <span id="host-eligible-count" class="px-2.5 py-0.5 text-xs font-bold rounded-full bg-amber-900/50 text-amber-300 border border-amber-500/30">0</span>
+                    </div>
+                    <div id="host-eligible-list" class="space-y-2 max-h-44 overflow-y-auto pr-1">
+                        <p class="text-xs text-slate-500 italic">No tickets eligible for unclaimed prizes yet...</p>
+                    </div>
+                </div>
+
+                <!-- Live Claimed Prizes Status Box -->
+                <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-xl space-y-3">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-sm sm:text-base font-bold text-emerald-400 flex items-center gap-2">
+                            <span>🏆 Prize Claim Status</span>
+                        </h3>
+                        <span id="host-claimed-count" class="px-2.5 py-0.5 text-xs font-bold rounded-full bg-emerald-900/50 text-emerald-300 border border-emerald-500/30">0 / 5</span>
+                    </div>
+                    <div id="host-claimed-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Host Rules Option Banner -->
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+                <div>
+                    <h3 class="text-sm font-bold text-white">Restrictions/Rules</h3>
+                    <p class="text-xs text-slate-400">Configure ticket claiming restrictions and Party entry rules.</p>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div class="flex items-center justify-between gap-3 bg-slate-900 px-4 py-3 rounded-xl border border-slate-700">
+                        <span class="text-xs font-bold text-slate-200">Restrict ticket from claiming another prize once won</span>
+                        <button type="button" id="host-rule-one-prize-btn" onclick="toggleHostRuleOnePrizePerTicket()" role="switch" aria-checked="false" class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-slate-700 transition-colors duration-200 ease-in-out focus:outline-none">
+                            <span id="host-rule-one-prize-knob" class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0"></span>
+                        </button>
+                    </div>
+                    <div class="flex items-center justify-between gap-3 bg-slate-900 px-4 py-3 rounded-xl border border-slate-700">
+                        <span class="text-xs font-bold text-slate-200">Allow multiple tickets per player (up to 4 max)</span>
+                        <button type="button" id="host-rule-multi-tickets-btn" onclick="toggleHostRuleMultiTickets()" role="switch" aria-checked="false" class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-slate-700 transition-colors duration-200 ease-in-out focus:outline-none">
+                            <span id="host-rule-multi-tickets-knob" class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0"></span>
+                        </button>
+                    </div>
+                    <div class="flex items-center justify-between gap-3 bg-slate-900 px-4 py-3 rounded-xl border border-slate-700">
+                        <span class="text-xs font-bold text-slate-200">Do not allow new players to join</span>
+                        <button type="button" id="host-rule-lock-room-btn" onclick="toggleHostRuleLockRoom()" role="switch" aria-checked="false" class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-slate-700 transition-colors duration-200 ease-in-out focus:outline-none">
+                            <span id="host-rule-lock-room-knob" class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= 2.5. MASTER BOARD TAB (HOST ONLY) ================= -->
+        <div id="section-board" class="hidden space-y-6">
+            <!-- Master 1-90 Board Grid -->
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-3 sm:p-4 shadow-xl max-w-2xl mx-auto">
+                <div class="flex flex-wrap justify-between items-center gap-2 mb-2.5">
+                    <div>
+                        <h2 class="text-sm font-bold text-white">Master Housie Board (1 to 90)</h2>
+                        <p class="text-[10px] text-slate-400">Display-only master board for tracking called numbers.</p>
+                    </div>
+                    <div class="flex items-center space-x-3 text-[11px] font-medium">
+                        <div class="flex items-center space-x-1">
+                            <div class="w-3 h-3 rounded bg-emerald-600"></div>
+                            <span class="text-slate-300">Called</span>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                            <div class="w-3 h-3 rounded bg-slate-900 border border-slate-700"></div>
+                            <span class="text-slate-400">Uncalled</span>
+                        </div>
+                    </div>
+                </div>
+                <div id="master-board" class="grid grid-cols-10 gap-1">
+                    <!-- Dynamically populated -->
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= 3. PLAYER TICKETS SECTION ================= -->
+        <div id="section-player" class="hidden space-y-6">
+
+            <!-- Live Caller Strip & Called Numbers Panel for Players -->
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <!-- Current Called Number Badge -->
+                    <div class="flex items-center gap-4">
+                        <div id="player-current-number" class="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-3xl sm:text-4xl font-black text-white shadow-lg border-2 border-emerald-300/30 flex-shrink-0">
+                            --
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs uppercase tracking-wider font-bold text-emerald-400">Latest Called Number</span>
+                                <span id="player-called-ratio" class="text-[11px] bg-slate-900 px-2 py-0.5 rounded-full text-slate-300 border border-slate-700">0/90</span>
+                            </div>
+                            <div id="player-current-nickname" class="text-sm sm:text-base font-semibold text-amber-300 mt-0.5">
+                                Waiting for host to draw a number...
+                            </div>
+                            <!-- Last 5 Called Numbers -->
+                            <div class="flex items-center gap-1.5 mt-2">
+                                <span class="text-[11px] text-slate-400 mr-1">Last 5:</span>
+                                <div id="player-last-five" class="flex items-center gap-1.5">
+                                    <span class="text-xs text-slate-500 italic">None yet</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Auto-Mark Toggle & Called History Button -->
+                    <div class="flex flex-wrap items-center gap-3 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 border-slate-700 pt-3 md:pt-0">
+                        <!-- Auto-Mark vs Manual-Mark Toggle -->
+                        <div class="flex items-center gap-2.5 bg-slate-900 px-3.5 py-2 rounded-xl border border-slate-700">
+                            <div>
+                                <div class="text-xs font-bold text-white" id="automark-status-label">Auto-Mark ON</div>
+                                <div class="text-[10px] text-slate-400" id="automark-sub-label">Auto-daubing called numbers</div>
+                            </div>
+                            <button type="button" id="automark-toggle-btn" onclick="toggleAutoMark()" role="switch" aria-checked="true" class="relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-emerald-600 transition-colors duration-200 ease-in-out focus:outline-none">
+                                <span id="automark-toggle-knob" class="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-5"></span>
+                            </button>
+                        </div>
+
+                        <!-- View All Called Numbers Toggle -->
+                        <button onclick="togglePlayerCalledBoard()" id="btn-toggle-called-board" class="px-3.5 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-semibold rounded-xl transition flex items-center gap-1.5">
+                            <span>📋 All Called (<span id="player-called-count-btn">0</span>)</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Expandable Full 1-90 Called Numbers Board for Player -->
+                <div id="player-called-board-drawer" class="hidden pt-4 border-t border-slate-700/80 space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs font-bold text-slate-300">Complete 1–90 Called Numbers Board</span>
+                        <span class="text-[11px] text-emerald-400">Green = Already Called</span>
+                    </div>
+                    <div id="player-mini-board" class="grid grid-cols-10 gap-1 max-w-2xl mx-auto">
+                        <!-- 1-90 mini cells injected here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Player View Prize Claim Status Section -->
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-sm sm:text-base font-bold text-emerald-400 flex items-center gap-2">
+                        <span>🏆 Live Prize Claim Status</span>
+                    </h3>
+                    <span id="player-claimed-count" class="px-2.5 py-0.5 text-xs font-bold rounded-full bg-emerald-900/50 text-emerald-300 border border-emerald-500/30">0</span>
+                </div>
+                <div id="player-claimed-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Tickets Management Bar -->
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-wrap justify-between items-center gap-3">
+                <div>
+                    <h2 class="text-lg font-bold text-white">Your Playing Tickets (<span id="player-tickets-header-count">0</span>)</h2>
+                    <p class="text-xs text-slate-400">Rename any ticket by clicking its title. Ticket count is locked once you join the Party.</p>
+                </div>
+                <div class="flex items-center space-x-2.5">
+                    <button id="add-ticket-btn" onclick="addNewPlayerTicket()" class="hidden px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold rounded-xl transition shadow">
+                        ➕ Add Ticket (Max 4)
+                    </button>
+                    <button onclick="clearAllDaubs()" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs sm:text-sm font-semibold rounded-xl transition">
+                        Clear Marks
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tickets Container -->
+            <div id="tickets-container" class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+
+        <!-- ================= 3.5. PLAYERS & TICKETS ROSTER TAB (HOST ONLY) ================= -->
+        <div id="section-players" class="hidden space-y-6">
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-5">
+                <div class="flex flex-wrap justify-between items-center gap-3">
+                    <div>
+                        <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                            <span>👥 Party Players & Tickets</span>
+                        </h2>
+                        <p class="text-xs text-slate-400">View all connected players, their ticket IDs, ticket names, and called numbers out of 15.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span id="all-players-count-badge" class="px-3 py-1 rounded-full bg-indigo-900/60 text-indigo-300 border border-indigo-500/30 text-xs font-bold">0 Players</span>
+                        <span id="all-tickets-count-badge" class="px-3 py-1 rounded-full bg-emerald-900/60 text-emerald-300 border border-emerald-500/30 text-xs font-bold">0 Tickets</span>
+                        <button type="button" onclick="forceRefreshRoomData(true)" class="px-3 py-1 bg-slate-700 hover:bg-slate-600 active:scale-95 text-slate-200 text-xs font-semibold rounded-full border border-slate-600 transition flex items-center gap-1">
+                            <span>🔄</span>
+                            <span>Refresh</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="all-players-roster-list" class="space-y-4">
+                    <p class="text-xs text-slate-500 italic">Loading Party participants...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= 3.6. PRIZES & WINNERS TAB ================= -->
+        <div id="section-prizex" class="hidden space-y-6">
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-5">
+                <div class="flex flex-wrap justify-between items-center gap-3">
+                    <div>
+                        <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                            <span>🏆 All Prizes & Winners Board</span>
+                        </h2>
+                        <p class="text-xs text-slate-400">View all available Tambola prizes and verified winners across the Party.</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="prizex-overview-list">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= 4. CLAIMS & PRIZES SECTION ================= -->
+        <div id="section-claims" class="hidden space-y-6">
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl">
+                <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-white">Winning Claims & Prizes</h2>
+                        <p class="text-xs text-slate-400">Select which of your named tickets completed the pattern and click Claim!</p>
+                    </div>
+                    <div class="flex items-center gap-2 bg-slate-900 p-2 rounded-xl border border-slate-700">
+                        <span class="text-xs text-slate-400 pl-1">Claim with:</span>
+                        <select id="claim-ticket-selector" class="bg-slate-800 border border-slate-700 text-white text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:outline-none">
+                            <!-- Populated with player's named tickets -->
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="claims-grid">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Live Winners Leaderboard -->
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl">
+                <h3 class="font-bold text-white text-base mb-4 flex items-center gap-2">
+                    <span>🏆 Verified Winners Board</span>
+                </h3>
+                <div id="claim-log" class="space-y-2.5 text-sm text-slate-400">
+                    <p class="italic">No claims verified yet. Be the first to win!</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Custom Notification / Confirmation Modal -->
+    <div id="custom-modal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl text-center">
+            <div id="modal-icon" class="text-4xl mb-3">🎉</div>
+            <h3 id="modal-title" class="text-lg font-bold text-white mb-2">Notification</h3>
+            <p id="modal-message" class="text-sm text-slate-300 mb-4">Message goes here.</p>
+            <div id="modal-body-extra" class="hidden text-left mb-5"></div>
+            <div id="modal-actions" class="flex gap-2">
+                <button onclick="closeModal()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-sm transition">
+                    Got It
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase & Multiplayer Game Script -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const MANUAL_FIREBASE_CONFIG = {
+            apiKey: "AIzaSyCgQ27fdHpO13OQ9V5fNIwktY_1Ezm7UQc",
+            authDomain: "online-housie-a4eb3.firebaseapp.com",
+            projectId: "online-housie-a4eb3",
+            storageBucket: "online-housie-a4eb3.firebasestorage.app",
+            messagingSenderId: "629233623023",
+            appId: "1:629233623023:web:90d6f4aa8a0aaeaa04a01a"
+        };
+
+
+        // Set this to your deployed Vercel project URL (no trailing slash).
+        const TAMBOLA_API_BASE_URL = "https://housie-flax.vercel.app";
+        const TAMBOLA_API_BASE = TAMBOLA_API_BASE_URL.replace(/\/$/, '');
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'housie';
+        const hasManualConfig = MANUAL_FIREBASE_CONFIG.apiKey && MANUAL_FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY";
+        const firebaseConfig = typeof __firebase_config !== 'undefined'
+            ? JSON.parse(__firebase_config)
+            : (hasManualConfig ? MANUAL_FIREBASE_CONFIG : null);
+        let app = null, db = null, auth = null, currentUser = null;
+
+        if (firebaseConfig) {
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+            } catch (err) {
+                console.warn("Firebase initialization warning:", err);
+            }
+        }
+
+        function getOrCreateFallbackUid(prefix = 'user') {
+            try {
+                const stored = localStorage.getItem('tambola_fallback_uid');
+                if (stored) return stored;
+                const generated = `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 9)}`;
+                localStorage.setItem('tambola_fallback_uid', generated);
+                return generated;
+            } catch (e) {
+                return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 9)}`;
+            }
+        }
+
+        async function ensureAuth() {
+            if (currentUser && currentUser.uid) return currentUser;
+            if (!auth) {
+                currentUser = { uid: getOrCreateFallbackUid('guest'), isFallback: true };
+                return currentUser;
+            }
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    const cred = await signInWithCustomToken(auth, __initial_auth_token);
+                    currentUser = cred.user;
+                } else {
+                    const cred = await signInAnonymously(auth);
+                    currentUser = cred.user;
+                }
+            } catch (err) {
+                console.warn("Firebase Auth fallback triggered:", err);
+                currentUser = { uid: getOrCreateFallbackUid('host'), isFallback: true };
+            }
+            return currentUser;
+        }
+
+        const tambolaNicknames = {
+            1: "Top of the house / One", 2: "Kaala Dhan / Duck", 3: "Economy Six / Dilwala", 4: "Murgi / Four", 5: "Panchhi / Hand", 6: "Sixer / Cabinet", 7: "Lucky Seven", 8: "Garden Gate", 9: "Doctor's Time", 10: "A Reel / Ten",
+            11: "Legs Eleven", 12: "One Dozen", 13: "Unlucky for Some", 14: "Valentine's Day", 15: "Young and Keen", 16: "Sweet Sixteen", 17: "Dancing Queen", 18: "Coming of Age", 19: "Goodbye Teens", 20: "Blind Twenty / Score",
+            21: "Royal Salute", 22: "Two Little Ducks", 23: "The Lord is My Shepherd", 24: "Two Dozen", 25: "Christmas Cake", 26: "Pick and Mix", 27: "Gateway to Heaven", 28: "In the State", 29: "Rise and Shine", 30: "Dirty Gertie / Three-0",
+            31: "Get Up and Run", 32: "Buckle My Shoe", 33: "All the Threes", 34: "Ask for More", 35: "Jump and Jive", 36: "Three Dozen", 37: "More than Eleven", 38: "Christmas Tree", 39: "Steps", 40: "Naughty Forty",
+            41: "Time for Fun", 42: "Winnie the Pooh", 43: "Down on Your Knees", 44: "All the Fours", 45: "Halfway There", 46: "Up to Tricks", 47: "Four and Seven", 48: "Four Dozen", 49: "PC", 50: "Half a Century",
+            51: "Tweak of the Thumb", 52: "Deck of Cards", 53: "Stuck in the Tree", 54: "Clean the Floor", 55: "All the Fives / Double Nickel", 56: "Washerwoman", 57: "Heinz Varieties", 58: "Make Them Wait", 59: "The Brighton Line", 60: "Five Dozen",
+            61: "Baker's Bun", 62: "Turn the Screw", 63: "Tickle Me", 64: "Red Raw", 65: "Old Age Pension", 66: "Clickety Click", 67: "Stairway to Heaven", 68: "Saving Grace", 69: "Either Way You Look", 70: "Lazy Husband / Seventy",
+            71: "Click and Jiggle", 72: "Six Dozen", 73: "Queen Bee", 74: "Candy Store", 75: "Strive and Strive", 76: "Trombones", 77: "All the Sevens", 78: "Heaven's Gate", 79: "One More Time", 80: "Grandma's Eightieth / Eight",
+            81: "Fat Lady with a Walking Stick", 82: "Straight On Through", 83: "Time for Tea", 84: "Seven Dozen", 85: "Staying Alive", 86: "Between the Sticks", 87: "Torquay in Devon", 88: "All the Eights", 89: "Nearly There", 90: "Top of the Shop / Grand Finale"
+        };
+
+        let roomCode = null;
+        let isHost = false;
+        let playerName = "Player";
+        let calledNumbers = [];
+        let currentNumber = null;
+        let autoPlayInterval = null;
+        let isAudioEnabled = false; 
+        let isAutoMarkEnabled = true;
+        let restrictOnePrizePerTicket = false; 
+        let allowMultiTickets = false;
+        let lockRoomNewPlayers = false; 
+        let maxRoomTickets = 50;
+        let tickets = [];
+        let claimsStatus = {
+            "Early 5": null,
+            "Early 10": null,
+            "Top Line": null,
+            "Middle Line": null,
+            "Bottom Line": null,
+            "Full House": null
+        };
+        let prizesEnabled = {
+            "Early 5": true,
+            "Early 10": true,
+            "Top Line": true,
+            "Middle Line": true,
+            "Bottom Line": true,
+            "Full House": true
+        };
+        let unsubscribeRoom = null;
+        let unsubscribePlayers = null;
+        let unsubscribeToken = null;
+        let statusMonitorInterval = null;
+        let activeHostTokenCode = null;
+        let activeHostTokenDocRef = null;
+        let activeHostTokenIsSingleUse = false;
+        let roomRoster = [];
+
+        let hostingTokensDB = []; // No browser/localStorage token issuance or fallback.
+
+        function saveHostingTokensDB() {}
+
+        const STRIPE_PAYMENT_LINKS = {
+            STARTER: "https://buy.stripe.com/test_5kQ14n11meQm7Hd29F1oI00",
+            STANDARD: "https://buy.stripe.com/test_cNi28rh0kaA69Pl6pV1oI01",
+            MEGA: "https://buy.stripe.com/test_28E9AT25q4bI2mT7tZ1oI02"
+        };
+
+        function promptBuyTicketPackage(tierName, ticketCount, priceStr) {
+            const paymentUrl = STRIPE_PAYMENT_LINKS[String(tierName || '').toUpperCase()];
+            if (!paymentUrl) {
+                showModal('⚠️', 'Package Unavailable', 'This package payment link is not configured.');
+                return;
+            }
+            // Stripe Checkout collects payment details. No token is generated in this browser.
+            window.location.assign(paymentUrl);
+        }
+
+        function submitTicketPackagePurchase() {
+            showModal('ℹ️', 'Secure Checkout', 'Please choose a package and complete payment on Stripe Checkout.');
+        }
+
+        async function completeBuyTicketPackage() {
+            showModal('🔒', 'Payment Verification Required', 'Host Tokens are issued only by the secure server after Stripe confirms payment.');
+        }
+
+        async function checkStripePaymentReturn() {
+            const params = new URLSearchParams(window.location.search);
+            const sessionId = params.get('session_id');
+            if (!sessionId || params.get('payment') !== 'success') return;
+            showModal('⏳', 'Confirming Your Payment', 'Stripe is confirming your payment. Please keep this page open.');
+            const messageEl = document.getElementById('modal-message');
+            for (let attempt = 0; attempt < 15; attempt++) {
+                try {
+                    const response = await fetch(`${TAMBOLA_API_BASE}/api/payment-status?session_id=${encodeURIComponent(sessionId)}`);
+                    const data = await response.json();
+                    if (response.ok && data.status === 'fulfilled' && data.token) {
+                        const tokenInput = document.getElementById('host-token-input');
+                        if (tokenInput) tokenInput.value = data.token;
+                        showModal('✅', `${data.tier || 'Package'} Activated!`, `Your Stripe payment was verified. Your single-use Host Token is:\n\n${data.token}\n\nCapacity: ${data.maxTickets} tickets. The token has also been saved in Firestore.`);
+                        return;
+                    }
+                    if (response.status >= 400 && response.status !== 404 && response.status !== 202) {
+                        showModal('⚠️', 'Payment Not Confirmed', data.error || 'We could not verify this payment. Please contact support before trying again.');
+                        return;
+                    }
+                    if (messageEl) messageEl.textContent = 'Payment received or processing. Waiting for the secure Firestore token to be issued…';
+                } catch (err) {
+                    if (messageEl) messageEl.textContent = 'Could not reach the payment verification server. Please refresh this page in a moment.';
+                }
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+            showModal('⏳', 'Payment Is Still Processing', 'Your payment may have succeeded, but the token has not appeared yet. Refresh this page shortly. Do not pay again unless Stripe shows that the first payment failed.');
+        }
+
+        function getAllParticipantsList(roster) {
+            return (roster || []).filter(p => p && p.left !== true);
+        }
+
+        function renderAllPlayersRosterTab() {
+            const listEl = document.getElementById('all-players-roster-list');
+            const badgeEl = document.getElementById('all-players-count-badge');
+            const ticketsBadgeEl = document.getElementById('all-tickets-count-badge');
+            if (!listEl) return;
+
+            const allParticipants = getAllParticipantsList(roomRoster);
+            let totalTicketsCount = 0;
+            allParticipants.forEach(p => {
+                if (p.serializedTickets) {
+                    try {
+                        const parsed = JSON.parse(p.serializedTickets);
+                        totalTicketsCount += parsed.length;
+                    } catch (e) {}
+                }
+            });
+
+            if (badgeEl) badgeEl.textContent = `${allParticipants.length} Player${allParticipants.length === 1 ? '' : 's'}`;
+            if (ticketsBadgeEl) ticketsBadgeEl.textContent = `${totalTicketsCount} Ticket${totalTicketsCount === 1 ? '' : 's'}`;
+
+            if (allParticipants.length === 0) {
+                listEl.innerHTML = `<p class="text-xs text-slate-500 italic">No players connected yet...</p>`;
+                return;
+            }
+
+            const calledSet = new Set(calledNumbers);
+
+            listEl.innerHTML = allParticipants.map((p, pIdx) => {
+                let parsedTickets = [];
+                if (p.serializedTickets) {
+                    try {
+                        parsedTickets = JSON.parse(p.serializedTickets);
+                    } catch (e) {
+                        parsedTickets = [];
+                    }
+                }
+
+                const ticketsHtml = parsedTickets.map((tkt, tIdx) => {
+                    let markedCount = 0;
+                    const gridRows = tkt.grid || [];
+                    const daubedRows = tkt.daubed || Array.from({ length: 3 }, () => Array(9).fill(false));
+
+                    for (let r = 0; r < 3; r++) {
+                        for (let c = 0; c < 9; c++) {
+                            const val = gridRows[r] ? gridRows[r][c] : 0;
+                            if (val > 0 && ((daubedRows[r] && daubedRows[r][c]) || calledSet.has(val))) {
+                                markedCount++;
+                            }
+                        }
+                    }
+
+                    const gridContent = gridRows.map((rowArr, rIdx) =>
+                        rowArr.map((val, cIdx) => {
+                            if (val === 0) {
+                                return `<div class="aspect-square rounded bg-slate-900/40 border border-slate-800"></div>`;
+                            }
+                            const isDaubed = (daubedRows[rIdx] && daubedRows[rIdx][cIdx]) || calledSet.has(val);
+                            return `
+                                <div class="aspect-square rounded font-extrabold text-[10px] sm:text-xs flex items-center justify-center border select-none ${
+                                    isDaubed
+                                        ? 'bg-emerald-600 text-white border-emerald-400'
+                                        : 'bg-slate-900 text-slate-300 border-slate-700'
+                                }">
+                                    ${val}
+                                </div>
+                            `;
+                        }).join('')
+                    ).join('');
+
+                    const tktUniqueId = `roster-tkt-${pIdx}-${tIdx}`;
+
+                    return `
+                        <div class="bg-slate-900/80 border border-slate-700/80 rounded-xl p-3 space-y-2">
+                            <div class="flex flex-wrap justify-between items-center gap-1 text-xs">
+                                <div>
+                                    <span class="font-bold text-white">Ticket: "${escapeHtml(tkt.name || 'Ticket')}"</span>
+                                    <span class="ml-2 font-mono text-[10px] text-indigo-300 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">${escapeHtml(tkt.id || '')}</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="px-2 py-0.5 rounded bg-slate-800 text-emerald-400 border border-slate-700 font-semibold">
+                                        ${markedCount} / 15 Called
+                                    </span>
+                                    <button onclick="document.getElementById('${tktUniqueId}').classList.toggle('hidden')" class="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 text-[11px] font-semibold transition">
+                                        Toggle View
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="${tktUniqueId}" class="hidden pt-2">
+                                <div class="grid grid-cols-9 gap-1 max-w-sm">
+                                    ${gridContent}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                const ticketNamesList = parsedTickets.map(t => `"${escapeHtml(t.name || 'Ticket')}"`).join(', ');
+
+                return `
+                    <div class="bg-slate-900 border border-slate-700 rounded-xl p-4 space-y-3">
+                        <div class="flex flex-wrap justify-between items-center gap-2">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                                <span class="font-bold text-white text-sm sm:text-base">${escapeHtml(p.name || 'Player')}</span>
+                                ${ticketNamesList ? `<span class="text-xs text-slate-400 font-medium">(${ticketNamesList})</span>` : ''}
+                            </div>
+                            <span class="text-xs text-slate-300 bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">${parsedTickets.length} ticket${parsedTickets.length === 1 ? '' : 's'}</span>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                            ${parsedTickets.length > 0 ? ticketsHtml : '<p class="text-xs text-slate-500 italic">No active tickets remaining.</p>'}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        const LOCAL_STORAGE_KEY = 'tambola_player_session_v1';
+
+        function saveSessionState() {
+            if (!roomCode) return;
+            const state = {
+                roomCode,
+                isHost,
+                playerName,
+                maxRoomTickets,
+                tickets,
+                isAutoMarkEnabled,
+                savedAt: Date.now()
+            };
+            try {
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
+            } catch (e) {
+                console.error("Failed to save session state:", e);
+            }
+        }
+
+        function clearSessionState() {
+            try {
+                localStorage.removeItem(LOCAL_STORAGE_KEY);
+            } catch (e) {
+                console.error("Failed to clear session state:", e);
+            }
+        }
+
+        function generateRoomCode() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let code = '';
+            for (let i = 0; i < 6; i++) {
+                code += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return code;
+        }
+
+        function generateTambolaTicketGrid() {
+            let valid = false;
+            let grid = [];
+
+            while (!valid) {
+                grid = Array.from({ length: 3 }, () => Array(9).fill(0));
+                const colCounts = Array(9).fill(1);
+                let remaining = 6;
+
+                while (remaining > 0) {
+                    const col = Math.floor(Math.random() * 9);
+                    if (colCounts[col] < 3) {
+                        colCounts[col]++;
+                        remaining--;
+                    }
+                }
+
+                const rowCounts = [0, 0, 0];
+                let possible = true;
+
+                const colOrder = [0, 1, 2, 3, 4, 5, 6, 7, 8].sort((a, b) => colCounts[b] - colCounts[a]);
+
+                for (const col of colOrder) {
+                    const count = colCounts[col];
+                    const minNum = col === 0 ? 1 : col * 10;
+                    const maxNum = col === 8 ? 90 : col * 10 + 9;
+                    const pool = [];
+                    for (let n = minNum; n <= maxNum; n++) pool.push(n);
+
+                    const chosenNums = [];
+                    for (let k = 0; k < count; k++) {
+                        const idx = Math.floor(Math.random() * pool.length);
+                        chosenNums.push(pool.splice(idx, 1)[0]);
+                    }
+                    chosenNums.sort((a, b) => a - b);
+
+                    const availableRows = [0, 1, 2].filter(r => rowCounts[r] < 5);
+                    if (availableRows.length < count) {
+                        possible = false;
+                        break;
+                    }
+
+                    availableRows.sort((a, b) => rowCounts[a] - rowCounts[b] || (Math.random() - 0.5));
+                    const chosenRows = availableRows.slice(0, count).sort((a, b) => a - b);
+
+                    for (let k = 0; k < count; k++) {
+                        grid[chosenRows[k]][col] = chosenNums[k];
+                        rowCounts[chosenRows[k]]++;
+                    }
+                }
+
+                if (possible && rowCounts[0] === 5 && rowCounts[1] === 5 && rowCounts[2] === 5) {
+                    valid = true;
+                }
+            }
+            return grid;
+        }
+
+        function generateUniqueTicketId() {
+            const existingIds = new Set(tickets.map(t => t.id));
+            let uniqueId = '';
+            do {
+                const randPart = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                    ? crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()
+                    : (Date.now().toString(36) + Math.random().toString(36).substring(2, 6)).slice(-8).toUpperCase();
+                uniqueId = `TKT-${randPart}`;
+            } while (existingIds.has(uniqueId));
+            return uniqueId;
+        }
+
+        function createTicketObject(name) {
+            return {
+                id: generateUniqueTicketId(),
+                name: name,
+                grid: generateTambolaTicketGrid(),
+                daubed: Array.from({ length: 3 }, () => Array(9).fill(false))
+            };
+        }
+
+        async function createMultiplayerGame(offlineMode) {
+            const tokenInput = document.getElementById('host-token-input').value.trim().toUpperCase();
+            if (!tokenInput) {
+                showModal('⚠️', 'Host Token Required', 'Please enter a valid Host Token to start hosting.');
+                return;
+            }
+            if (!db) {
+                showModal('⚠️', 'Connection Required', 'Firebase is unavailable. Please refresh and try again.');
+                return;
+            }
+
+            const newRoomCode = generateRoomCode();
+            const btn = document.getElementById('btn-create-room');
+            let validTokenData = null;
+            let isSingleUseToken = true;
+            try {
+                btn.disabled = true;
+                btn.innerHTML = '<span>⏳ Validating Host Token...</span>';
+                const response = await fetch(`${TAMBOLA_API_BASE}/api/redeem-token`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: tokenInput, roomCode: newRoomCode })
+                });
+                const result = await response.json();
+                if (!response.ok || !result.ok) {
+                    throw new Error(result.error || 'This token is invalid, inactive, or has already been used.');
+                }
+                maxRoomTickets = Number(result.maxTickets) || 50;
+                isSingleUseToken = Boolean(result.singleUse);
+                validTokenData = {
+                    ref: doc(db, 'artifacts', appId, 'public', 'data', 'tambola_tokens', tokenInput),
+                    maxTickets: maxRoomTickets,
+                    singleUse: isSingleUseToken
+                };
+            } catch (err) {
+                showModal('❌', 'Host Token Could Not Be Activated', err.message || 'The secure token service could not validate this token.');
+                btn.disabled = false;
+                btn.innerHTML = '<span>🚀 Start Hosting</span>';
+                return;
+            }
+
+            isHost = true;
+            playerName = "Host";
+            roomCode = newRoomCode;
+            activeHostTokenCode = tokenInput;
+            activeHostTokenDocRef = validTokenData ? validTokenData.ref : null;
+            activeHostTokenIsSingleUse = isSingleUseToken;
+            roomRoster = [];
+            tickets = [];
+
+            saveSessionState();
+
+            if (db) {
+                try {
+                    btn.innerHTML = '<span>⏳ Creating Live Party...</span>';
+
+                    const user = await ensureAuth();
+                    const hostUid = (user && user.uid) ? user.uid : getOrCreateFallbackUid('host');
+
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                    await setDoc(roomRef, {
+                        roomCode: roomCode,
+                        hostId: hostUid,
+                        hostName: playerName,
+                        hostToken: tokenInput,
+                        status: 'active',
+                        active: true,
+                        roomClosed: false,
+                        maxRoomTickets: maxRoomTickets,
+                        calledNumbers: [],
+                        currentNumber: null,
+                        restrictOnePrizePerTicket: restrictOnePrizePerTicket,
+                        lockRoomNewPlayers: lockRoomNewPlayers,
+                        prizesEnabled: prizesEnabled,
+                        claims: {
+                            "Early 5": null,
+                            "Early 10": null,
+                            "Top Line": null,
+                            "Middle Line": null,
+                            "Bottom Line": null,
+                            "Full House": null
+                        },
+                        createdAt: Date.now()
+                    });
+
+                    subscribeToRoom(roomCode);
+                } catch (err) {
+                    console.error("Failed to create multiplayer Party:", err);
+                    showModal('⚠️', 'Party Creation Failed', `The token was securely reserved, but the party could not be created (${err.message || 'Network/Storage blocked'}). Please contact support with token ${tokenInput}; do not retry payment.`);
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>🚀 Start Hosting</span>';
+                }
+            }
+
+            enterGameRoomUI();
+            showModal('🎉', 'Party Successfully Created!', `Your new party has been successfully created!\nParty Code: ${roomCode}`);
+        }
+
+        async function joinExistingGame() {
+            const codeInput = document.getElementById('join-room-code').value.trim().toUpperCase();
+            const playerNameInput = document.getElementById('join-player-name').value.trim();
+            const ticketCountInput = 1;
+
+            if (codeInput.length !== 6) {
+                showModal('⚠️', 'Invalid Code', 'Please enter a valid 6-character Party Code.');
+                return;
+            }
+            if (!playerNameInput) {
+                showModal('⚠️', 'Player Name Required', 'Please enter your player name.');
+                return;
+            }
+            if (!db) {
+                showModal('⚠️', 'Offline Environment', 'Live multiplayer database is unavailable in this preview.');
+                return;
+            }
+
+            const btn = document.getElementById('btn-join-room');
+            btn.disabled = true;
+            btn.innerHTML = '<span>⏳ Joining Party...</span>';
+
+            try {
+                const user = await ensureAuth();
+                const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', codeInput);
+                const snap = await getDoc(roomRef);
+
+                if (!snap.exists()) {
+                    showModal('❌', 'Party Not Found', `No active game found with code "${codeInput}". Double-check with your host.`);
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>🎯 Join Live party</span>';
+                    return;
+                }
+
+                const roomData = snap.data();
+                if (isPartyDocInactive(roomData)) {
+                    showModal('🚫', 'Party Permanently Closed', `Party "${codeInput}" has been ended or is inactive.`);
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>🎯 Join Live party</span>';
+                    return;
+                }
+
+                maxRoomTickets = roomData.maxRoomTickets || 50;
+
+                const isMatchingHostToken = roomData.hostToken && roomData.hostToken.trim().toUpperCase() === playerNameInput.toUpperCase();
+                const isExistingHost = (user && roomData.hostId === user.uid) || Boolean(isMatchingHostToken);
+
+                if (roomData.lockRoomNewPlayers && !isExistingHost) {
+                    showModal('🔒', 'Party Locked', 'The host has locked this Party and is not allowing new players to join.');
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>🎯 Join Live party</span>';
+                    return;
+                }
+
+                if (isExistingHost) {
+                    roomCode = codeInput;
+                    isHost = true;
+                    playerName = roomData.hostName || "Host";
+                    activeHostTokenCode = roomData.hostToken || null;
+                    tickets = [];
+
+                    saveSessionState();
+
+                    calledNumbers = roomData.calledNumbers || [];
+                    currentNumber = roomData.currentNumber || null;
+                    claimsStatus = roomData.claims || claimsStatus;
+                    if (roomData.prizesEnabled) {
+                        prizesEnabled = roomData.prizesEnabled;
+                    }
+                    if (roomData.restrictOnePrizePerTicket !== undefined) {
+                        restrictOnePrizePerTicket = roomData.restrictOnePrizePerTicket;
+                    }
+                    if (roomData.allowMultiTickets !== undefined) {
+                        allowMultiTickets = roomData.allowMultiTickets;
+                    }
+                    if (roomData.lockRoomNewPlayers !== undefined) {
+                        lockRoomNewPlayers = roomData.lockRoomNewPlayers;
+                    }
+
+                    subscribeToRoom(roomCode);
+                    enterGameRoomUI();
+                    showModal('🎙️', 'Host Re-joined', `Welcome back! You have securely re-joined Party ${roomCode} as the Host.`);
+                    return;
+                }
+
+                const playersCol = collection(db, 'artifacts', appId, 'public', 'data', `tambola_players_${codeInput}`);
+                const playersSnap = await getDocs(playersCol);
+                let currentTotalTickets = 0;
+                playersSnap.forEach(d => {
+                    const p = d.data();
+                    if (p && p.left !== true && p.uid !== (user ? user.uid : '')) {
+                        currentTotalTickets += (p.ticketCount || 0);
+                    }
+                });
+
+                if (currentTotalTickets + ticketCountInput > maxRoomTickets) {
+                    showModal('⚠️', 'Ticket Capacity Reached', `This Party has a maximum capacity of ${maxRoomTickets} tickets. Joining would exceed the limit (${currentTotalTickets} already taken).`);
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>🎯 Join Live party</span>';
+                    return;
+                }
+
+                roomCode = codeInput;
+                playerName = playerNameInput;
+                activeHostTokenCode = roomData.hostToken || null;
+                isHost = false;
+
+                tickets = [];
+                for (let i = 0; i < ticketCountInput; i++) {
+                    tickets.push(createTicketObject(`Ticket ${i + 1}`));
+                }
+
+                if (isAutoMarkEnabled) {
+                    applyAutoMarkToAllTickets();
+                }
+
+                saveSessionState();
+
+                const playerUid = (user && user.uid) ? user.uid : getOrCreateFallbackUid('player');
+                const playerRef = doc(db, 'artifacts', appId, 'public', 'data', `tambola_players_${roomCode}`, playerUid);
+                await setDoc(playerRef, {
+                    uid: playerUid,
+                    name: playerName,
+                    left: false,
+                    ticketCount: tickets.length,
+                    ticketNames: tickets.map(t => t.name),
+                    serializedTickets: JSON.stringify(tickets.map(t => ({ id: t.id, name: t.name, grid: t.grid, daubed: t.daubed }))),
+                    joinedAt: Date.now()
+                });
+
+                calledNumbers = roomData.calledNumbers || [];
+                currentNumber = roomData.currentNumber || null;
+                claimsStatus = roomData.claims || claimsStatus;
+                if (roomData.prizesEnabled) {
+                    prizesEnabled = roomData.prizesEnabled;
+                }
+                if (roomData.restrictOnePrizePerTicket !== undefined) {
+                    restrictOnePrizePerTicket = roomData.restrictOnePrizePerTicket;
+                }
+                if (roomData.lockRoomNewPlayers !== undefined) {
+                    lockRoomNewPlayers = roomData.lockRoomNewPlayers;
+                }
+
+                subscribeToRoom(roomCode);
+                enterGameRoomUI();
+            } catch (err) {
+                console.error("Join Party error:", err);
+                showModal('❌', 'Join Failed', 'Unable to join Party right now. Please try again.');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span>🎯 Join Live party</span>';
+            }
+        }
+
+        async function attemptAutoReconnect() {
+            try {
+                const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+                if (!raw) return;
+                const session = JSON.parse(raw);
+                if (!session || !session.roomCode) return;
+                if (!session.isHost && (!session.tickets || session.tickets.length === 0)) return;
+
+                if (Date.now() - session.savedAt > 12 * 3600 * 1000) {
+                    clearSessionState();
+                    return;
+                }
+
+                roomCode = session.roomCode;
+                isHost = session.isHost;
+                playerName = session.playerName;
+                maxRoomTickets = session.maxRoomTickets || 50;
+                tickets = session.tickets || [];
+                isAutoMarkEnabled = session.isAutoMarkEnabled ?? true;
+
+                if (db) {
+                    const user = await ensureAuth();
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                    const snap = await getDoc(roomRef);
+                    if (snap.exists()) {
+                        const roomData = snap.data();
+                        if (isPartyDocInactive(roomData)) {
+                            clearSessionState();
+                            roomCode = null;
+                            return;
+                        }
+
+                        activeHostTokenCode = roomData.hostToken || null;
+                        maxRoomTickets = roomData.maxRoomTickets || 50;
+                        calledNumbers = roomData.calledNumbers || [];
+                        currentNumber = roomData.currentNumber || null;
+                        claimsStatus = roomData.claims || claimsStatus;
+                        if (roomData.prizesEnabled) {
+                            prizesEnabled = roomData.prizesEnabled;
+                        }
+                        if (roomData.restrictOnePrizePerTicket !== undefined) {
+                            restrictOnePrizePerTicket = roomData.restrictOnePrizePerTicket;
+                        }
+                        if (roomData.lockRoomNewPlayers !== undefined) {
+                            lockRoomNewPlayers = roomData.lockRoomNewPlayers;
+                            updateHostRuleUI();
+                        }
+
+                        if (user && tickets.length > 0) {
+                            const playerRef = doc(db, 'artifacts', appId, 'public', 'data', `tambola_players_${roomCode}`, user.uid);
+                            await setDoc(playerRef, {
+                                uid: user.uid,
+                                name: playerName,
+                                left: false,
+                                ticketCount: tickets.length,
+                                ticketNames: tickets.map(t => t.name),
+                                serializedTickets: JSON.stringify(tickets.map(t => ({ id: t.id, name: t.name, grid: t.grid, daubed: t.daubed }))),
+                                joinedAt: Date.now()
+                            }, { merge: true });
+                        }
+                    } else {
+                        clearSessionState();
+                        return;
+                    }
+                }
+
+                subscribeToRoom(roomCode);
+                enterGameRoomUI();
+            } catch (e) {
+                console.error("Auto-reconnect error:", e);
+                clearSessionState();
+            }
+        }
+
+        async function fetchRoomAndPlayersSnapshot(code) {
+            if (!db || !code) return;
+            try {
+                const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', code);
+                const playersCol = collection(db, 'artifacts', appId, 'public', 'data', `tambola_players_${code}`);
+
+                const [roomSnap, playersSnap] = await Promise.all([
+                    getDoc(roomRef),
+                    getDocs(playersCol)
+                ]);
+
+                if (roomSnap.exists()) {
+                    const data = roomSnap.data();
+                    if (isPartyDocInactive(data)) {
+                        forceCloseInactiveParty('Party Closed', 'The party status is now inactive. The party has been closed.');
+                        return;
+                    }
+                    maxRoomTickets = data.maxRoomTickets || 50;
+                    calledNumbers = data.calledNumbers || [];
+                    currentNumber = data.currentNumber || null;
+                    claimsStatus = data.claims || claimsStatus;
+                    if (data.prizesEnabled) {
+                        prizesEnabled = data.prizesEnabled;
+                    }
+                    if (data.restrictOnePrizePerTicket !== undefined) {
+                        restrictOnePrizePerTicket = data.restrictOnePrizePerTicket;
+                    }
+                    if (data.allowMultiTickets !== undefined) {
+                        allowMultiTickets = data.allowMultiTickets;
+                    }
+                    if (data.lockRoomNewPlayers !== undefined) {
+                        lockRoomNewPlayers = data.lockRoomNewPlayers;
+                    }
+                    if (isAutoMarkEnabled) {
+                        applyAutoMarkToAllTickets();
+                    }
+                }
+
+                const roster = [];
+                playersSnap.forEach(d => {
+                    const pData = d.data();
+                    if (pData && pData.left !== true) {
+                        roster.push(pData);
+                    }
+                });
+                roomRoster = roster;
+                renderConnectedPlayers(roomRoster);
+                updateAllRoomUI();
+            } catch (err) {
+                console.error("Manual/resume snapshot fetch error:", err);
+            }
+        }
+
+        async function forceRefreshRoomData(showFeedback = false) {
+            if (!roomCode || !db) return;
+            const statusLabel = document.getElementById('sync-status-label');
+            const refreshBtn = document.getElementById('btn-refresh-players');
+            if (statusLabel) statusLabel.textContent = 'Syncing...';
+            if (refreshBtn) refreshBtn.disabled = true;
+
+            try {
+                await ensureAuth();
+                await fetchRoomAndPlayersSnapshot(roomCode);
+                subscribeToRoom(roomCode);
+                if (statusLabel) statusLabel.textContent = 'Synced just now';
+                if (showFeedback) {
+                    showModal('🔄', 'Synced', 'Room data and connected players list have been refreshed.');
+                }
+            } catch (err) {
+                console.error("Force refresh error:", err);
+                if (statusLabel) statusLabel.textContent = 'Sync failed';
+            } finally {
+                if (refreshBtn) refreshBtn.disabled = false;
+            }
+        }
+
+        function forceCloseInactiveParty(title, message) {
+            if (unsubscribeRoom) { unsubscribeRoom(); unsubscribeRoom = null; }
+            if (unsubscribePlayers) { unsubscribePlayers(); unsubscribePlayers = null; }
+            if (unsubscribeToken) { unsubscribeToken(); unsubscribeToken = null; }
+            if (statusMonitorInterval) { clearInterval(statusMonitorInterval); statusMonitorInterval = null; }
+            if (autoPlayInterval) { clearInterval(autoPlayInterval); autoPlayInterval = null; }
+
+            if (isHost && db && roomCode) {
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                    updateDoc(roomRef, {
+                        roomClosed: true,
+                        status: 'inactive',
+                        closedAt: Date.now(),
+                        hostToken: null
+                    }).catch(() => {});
+                } catch (e) {}
+
+                if (activeHostTokenIsSingleUse) {
+                    if (activeHostTokenDocRef) {
+                        updateDoc(activeHostTokenDocRef, {
+                            active: false,
+                            status: 'inactive',
+                            inUse: false,
+                            activeRoomCode: null
+                        }).catch(() => {});
+                    }
+                }
+            }
+
+            clearSessionState();
+            roomCode = null;
+            isHost = false;
+            activeHostTokenCode = null;
+            activeHostTokenDocRef = null;
+            activeHostTokenIsSingleUse = false;
+            calledNumbers = [];
+            currentNumber = null;
+            tickets = [];
+            roomRoster = [];
+
+            document.getElementById('section-lobby').classList.remove('hidden');
+            ['host', 'board', 'player', 'players', 'prizex', 'claims'].forEach(t => {
+                const sec = document.getElementById(`section-${t}`);
+                if (sec) sec.classList.add('hidden');
+            });
+            document.getElementById('nav-tabs').classList.add('hidden');
+            document.getElementById('leave-room-btn').classList.add('hidden');
+            document.getElementById('audio-btn').classList.add('hidden');
+            document.getElementById('room-status-pill').innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span><span>Lobby / Setup</span>`;
+
+            showModal('🚫', title || 'Party Closed', message || 'This party has been closed because the Host Token or Party status became inactive.');
+        }
+
+        function isTokenDocInactive(tokenData) {
+            if (!tokenData) return false;
+            if (tokenData.active === false) return true;
+            if (typeof tokenData.status === 'string' && tokenData.status.toLowerCase() !== 'active') return true;
+            if (tokenData.expiresAt && Number(tokenData.expiresAt) < Date.now()) return true;
+            return false;
+        }
+
+        function isPartyDocInactive(roomData) {
+            if (!roomData) return true;
+            if (roomData.roomClosed === true) return true;
+            if (roomData.active === false) return true;
+            if (typeof roomData.status === 'string' && roomData.status.toLowerCase() !== 'active') return true;
+            return false;
+        }
+
+        async function verifyActivePartyAndTokenHealth() {
+            if (!db || !roomCode) return;
+            try {
+                const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                const roomSnap = await getDoc(roomRef);
+
+                if (!roomSnap.exists()) {
+                    forceCloseInactiveParty('Party Closed', 'This party no longer exists or has been closed.');
+                    return;
+                }
+
+                const roomData = roomSnap.data();
+                if (isPartyDocInactive(roomData)) {
+                    forceCloseInactiveParty('Party Closed', 'The party status is now inactive. The party has been closed.');
+                    return;
+                }
+
+                const tokenToCheck = (roomData.hostToken || activeHostTokenCode || '').trim().toUpperCase();
+                if (tokenToCheck) {
+                    activeHostTokenCode = tokenToCheck;
+                    const candidatePaths = [
+                        ['artifacts', appId, 'public', 'data', 'tambola_tokens', tokenToCheck],
+                        ['artifacts', appId, 'public', 'data', 'tambola_hosting_tokens', tokenToCheck],
+                        ['artifacts', appId, 'public', 'data', 'hosting_tokens', tokenToCheck]
+                    ];
+
+                    for (const pathSegments of candidatePaths) {
+                        try {
+                            const tSnap = await getDoc(doc(db, ...pathSegments));
+                            if (tSnap.exists()) {
+                                if (isTokenDocInactive(tSnap.data())) {
+                                    forceCloseInactiveParty('Party Closed', `The Host Token (${tokenToCheck}) is now inactive. This party has been closed.`);
+                                    return;
+                                }
+                                break;
+                            }
+                        } catch (e) {}
+                    }
+                }
+            } catch (err) {
+                console.warn("Periodic party/token health check warning:", err);
+            }
+        }
+
+        function subscribeToRoom(code) {
+            if (!db || !code) return;
+            if (unsubscribeRoom) unsubscribeRoom();
+            if (unsubscribePlayers) unsubscribePlayers();
+            if (unsubscribeToken) unsubscribeToken();
+            if (statusMonitorInterval) clearInterval(statusMonitorInterval);
+
+            const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', code);
+            unsubscribeRoom = onSnapshot(roomRef, (snap) => {
+                if (!snap.exists()) {
+                    forceCloseInactiveParty('Party Closed', 'This party has been removed or closed.');
+                    return;
+                }
+                const data = snap.data();
+
+                if (isPartyDocInactive(data)) {
+                    forceCloseInactiveParty('Party Closed', 'The party status has become inactive or was ended by the host.');
+                    return;
+                }
+
+                if (data.hostToken && data.hostToken !== activeHostTokenCode) {
+                    activeHostTokenCode = data.hostToken;
+                    attachHostTokenListener(activeHostTokenCode);
+                }
+
+                const prevCurrent = currentNumber;
+                maxRoomTickets = data.maxRoomTickets || 50;
+                calledNumbers = data.calledNumbers || [];
+                currentNumber = data.currentNumber || null;
+                claimsStatus = data.claims || claimsStatus;
+                if (data.prizesEnabled) {
+                    prizesEnabled = data.prizesEnabled;
+                }
+                if (data.restrictOnePrizePerTicket !== undefined) {
+                    restrictOnePrizePerTicket = data.restrictOnePrizePerTicket;
+                    updateHostRuleUI();
+                }
+                if (data.allowMultiTickets !== undefined) {
+                    allowMultiTickets = data.allowMultiTickets;
+                    updateHostRuleUI();
+                }
+                if (data.lockRoomNewPlayers !== undefined) {
+                    lockRoomNewPlayers = data.lockRoomNewPlayers;
+                    updateHostRuleUI();
+                }
+
+                if (currentNumber && currentNumber !== prevCurrent && !isHost) {
+                    speakNumber(currentNumber);
+                }
+
+                if (isAutoMarkEnabled) {
+                    applyAutoMarkToAllTickets();
+                }
+
+                updateAllRoomUI();
+            }, (err) => console.error("Room listener error:", err));
+
+            const playersCol = collection(db, 'artifacts', appId, 'public', 'data', `tambola_players_${code}`);
+            unsubscribePlayers = onSnapshot(playersCol, (snap) => {
+                const roster = [];
+                snap.forEach(d => {
+                    const pData = d.data();
+                    if (pData && pData.left !== true) {
+                        roster.push(pData);
+                    }
+                });
+                roomRoster = roster;
+                renderConnectedPlayers(roomRoster);
+                updateHostPrizeAndEligibilityMonitor();
+            }, (err) => console.error("Players listener error:", err));
+
+            if (activeHostTokenCode) {
+                attachHostTokenListener(activeHostTokenCode);
+            }
+
+            statusMonitorInterval = setInterval(() => {
+                verifyActivePartyAndTokenHealth();
+            }, 15000);
+        }
+
+        function attachHostTokenListener(tokenCode) {
+            if (!db || !tokenCode) return;
+            if (unsubscribeToken) {
+                unsubscribeToken();
+                unsubscribeToken = null;
+            }
+            const cleanToken = tokenCode.trim().toUpperCase();
+            const tokenRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_tokens', cleanToken);
+            unsubscribeToken = onSnapshot(tokenRef, (snap) => {
+                if (!snap.exists()) return;
+                if (isTokenDocInactive(snap.data())) {
+                    forceCloseInactiveParty('Party Closed', `The Host Token (${cleanToken}) became inactive. The party has been closed.`);
+                }
+            }, (err) => console.warn("Host token listener warning:", err));
+        }
+
+        function enterGameRoomUI() {
+            document.getElementById('section-lobby').classList.add('hidden');
+            document.getElementById('nav-tabs').classList.remove('hidden');
+            document.getElementById('leave-room-btn').classList.remove('hidden');
+            document.getElementById('audio-btn').classList.remove('hidden');
+
+            const statusPill = document.getElementById('room-status-pill');
+            statusPill.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span><span>Party: <strong class="text-amber-400 tracking-wider">${roomCode}</strong></span>`;
+
+            document.getElementById('display-room-code').textContent = roomCode;
+            document.getElementById('host-share-banner').classList.remove('hidden');
+
+            const tabHost = document.getElementById('tab-host');
+            const tabBoard = document.getElementById('tab-board');
+            const tabPlayers = document.getElementById('tab-players');
+            const tabPrizex = document.getElementById('tab-prizex');
+            if (tabPrizex) {
+                if (isHost) {
+                    tabPrizex.classList.remove('hidden');
+                } else {
+                    tabPrizex.classList.add('hidden');
+                }
+            }
+
+            if (isHost) {
+                tabHost.classList.remove('hidden');
+                if (tabBoard) tabBoard.classList.remove('hidden');
+                tabPlayers.classList.remove('hidden');
+                switchTab('host');
+            } else {
+                tabHost.classList.add('hidden');
+                if (tabBoard) tabBoard.classList.add('hidden');
+                tabPlayers.classList.add('hidden');
+                switchTab('player');
+            }
+
+            buildMasterBoard();
+            buildPlayerMiniBoard();
+            renderConnectedPlayers(roomRoster);
+            updateHostPrizeAndEligibilityMonitor();
+            updateAllRoomUI();
+        }
+        function renderConnectedPlayers(roster) {
+            const listEl = document.getElementById('connected-players-list');
+            const countEl = document.getElementById('player-roster-count');
+            const activeTicketsEl = document.getElementById('display-active-tickets');
+
+            const allParticipants = getAllParticipantsList(roster);
+            let totalActiveTickets = 0;
+
+            allParticipants.forEach(p => {
+                if (p.serializedTickets) {
+                    try {
+                        const parsed = JSON.parse(p.serializedTickets);
+                        totalActiveTickets += parsed.length;
+                    } catch (e) {
+                        totalActiveTickets += (p.ticketCount || 0);
+                    }
+                } else {
+                    totalActiveTickets += (p.ticketCount || 0);
+                }
+            });
+
+            if (activeTicketsEl) {
+                activeTicketsEl.textContent = `${totalActiveTickets} / ${maxRoomTickets}`;
+            }
+
+            if (!listEl) return;
+
+            if (countEl) countEl.textContent = allParticipants.length;
+
+            if (allParticipants.length === 0) {
+                listEl.innerHTML = `<span class="text-xs text-slate-500 italic">Waiting for players to join...</span>`;
+                return;
+            }
+
+            listEl.innerHTML = allParticipants.map(p => {
+                let parsedTickets = [];
+                if (p.serializedTickets) {
+                    try {
+                        parsedTickets = JSON.parse(p.serializedTickets);
+                    } catch (e) {
+                        parsedTickets = [];
+                    }
+                }
+                const ticketCount = parsedTickets.length;
+                const ticketNames = parsedTickets.map(t => t.name);
+                const ticketNamesStr = ticketNames.length > 0 ? `• "${ticketNames.join('", "')}"` : '';
+
+                return `
+                    <div class="bg-slate-900/80 border border-slate-700/60 rounded-xl px-3 py-2 flex items-center justify-between gap-2 text-xs">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                            <span class="font-bold text-white">${escapeHtml(p.name || 'Player')}</span>
+                            <span class="text-slate-400 truncate max-w-[200px]">${escapeHtml(ticketNamesStr)}</span>
+                        </div>
+                        <span class="px-2 py-0.5 rounded bg-slate-800 text-indigo-300 font-semibold border border-slate-700">${ticketCount} ticket${ticketCount === 1 ? '' : 's'}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function switchTab(tab) {
+            ['host', 'board', 'player', 'players', 'prizex', 'claims'].forEach(t => {
+                const sec = document.getElementById(`section-${t}`);
+                const btn = document.getElementById(`tab-${t}`);
+                if (!sec || !btn) return;
+                if (!isHost && (t === 'prizex' || t === 'board')) {
+                    btn.classList.add('hidden');
+                    sec.classList.add('hidden');
+                    return;
+                }
+                if (t === tab) {
+                    sec.classList.remove('hidden');
+                    btn.classList.remove('text-slate-400', 'hover:text-white');
+                    btn.classList.add('bg-emerald-600', 'text-white', 'shadow');
+                } else {
+                    sec.classList.add('hidden');
+                    btn.classList.remove('bg-emerald-600', 'text-white', 'shadow');
+                    btn.classList.add('text-slate-400', 'hover:text-white');
+                }
+            });
+            if (tab === 'claims') {
+                populateClaimTicketSelector();
+            }
+            if (tab === 'players' && isHost) {
+                renderAllPlayersRosterTab();
+            }
+            if (tab === 'prizex' && isHost) {
+                renderPrizexOverviewTab();
+            }
+        }
+
+        function updateAllRoomUI() {
+            updateHostBoardUI();
+            updateHostPrizeAndEligibilityMonitor();
+            updatePlayerCalledStripUI();
+            updatePlayerClaimStatusUI();
+            renderPlayerTickets();
+            updateClaimsUI();
+            updateAddTicketButtonUI();
+            if (isHost && !document.getElementById('section-players').classList.contains('hidden')) {
+                renderAllPlayersRosterTab();
+            }
+            if (isHost && !document.getElementById('section-prizex').classList.contains('hidden')) {
+                renderPrizexOverviewTab();
+            }
+            document.getElementById('ticket-count-badge').textContent = tickets.length;
+            document.getElementById('player-tickets-header-count').textContent = tickets.length;
+        }
+
+        function updatePlayerClaimStatusUI() {
+            const listEl = document.getElementById('player-claimed-list');
+            const countEl = document.getElementById('player-claimed-count');
+            if (!listEl) return;
+
+            const prizeOrder = ["Early 5", "Early 10", "Top Line", "Middle Line", "Bottom Line", "Full House"].filter(p => prizesEnabled[p] !== false);
+            let claimedTotal = 0;
+
+            listEl.innerHTML = prizeOrder.map(prize => {
+                const win = claimsStatus[prize];
+                if (win) {
+                    claimedTotal++;
+                    return `
+                        <div class="bg-emerald-950/60 border border-emerald-500/40 rounded-xl px-3 py-2.5 flex items-center justify-between gap-2">
+                            <div>
+                                <div class="text-xs font-bold text-emerald-300">${escapeHtml(prize)}</div>
+                                <div class="text-[11px] text-slate-300 truncate max-w-[150px]">${escapeHtml(win.winnerName)} (${escapeHtml(win.ticketName)})</div>
+                            </div>
+                            <span class="text-xs font-extrabold text-emerald-400">WON</span>
+                        </div>
+                    `;
+                }
+                return `
+                    <div class="bg-slate-900/70 border border-slate-700/70 rounded-xl px-3 py-2.5 flex items-center justify-between">
+                        <span class="text-xs font-semibold text-slate-300">${escapeHtml(prize)}</span>
+                        <span class="text-[11px] text-amber-400 font-medium">Open</span>
+                    </div>
+                `;
+            }).join('');
+            if (countEl) countEl.textContent = `${claimedTotal} / ${prizeOrder.length} Claimed`;
+        }
+
+        function updateAddTicketButtonUI() {
+            const addBtn = document.getElementById('add-ticket-btn');
+            if (!addBtn) return;
+            if (allowMultiTickets && tickets.length < 4) {
+                addBtn.classList.remove('hidden');
+            } else {
+                addBtn.classList.add('hidden');
+            }
+        }
+
+        async function addNewPlayerTicket() {
+            if (!allowMultiTickets) {
+                showModal('⚠️', 'Not Allowed', 'Multiple tickets per player are disabled by the host.');
+                return;
+            }
+            if (tickets.length >= 4) {
+                showModal('⚠️', 'Max Limit Reached', 'You can have a maximum of 4 tickets.');
+                return;
+            }
+
+            if (db && roomCode) {
+                try {
+                    const playersCol = collection(db, 'artifacts', appId, 'public', 'data', `tambola_players_${roomCode}`);
+                    const playersSnap = await getDocs(playersCol);
+                    let currentTotalTickets = 0;
+                    playersSnap.forEach(d => {
+                        const p = d.data();
+                        if (p && p.left !== true && p.uid !== (currentUser ? currentUser.uid : '')) {
+                            currentTotalTickets += (p.ticketCount || 0);
+                        }
+                    });
+                    currentTotalTickets += tickets.length;
+                    if (currentTotalTickets + 1 > maxRoomTickets) {
+                        showModal('⚠️', 'Capacity Reached', 'Adding another ticket would exceed the Party ticket capacity limit.');
+                        return;
+                    }
+                } catch (e) {}
+            }
+
+            const newTkt = createTicketObject(`Ticket ${tickets.length + 1}`);
+            if (isAutoMarkEnabled) {
+                const calledSet = new Set(calledNumbers);
+                for (let r = 0; r < 3; r++) {
+                    for (let c = 0; c < 9; c++) {
+                        const val = newTkt.grid[r][c];
+                        if (val > 0 && calledSet.has(val)) {
+                            newTkt.daubed[r][c] = true;
+                        }
+                    }
+                }
+            }
+            tickets.push(newTkt);
+            saveSessionState();
+
+            if (db && currentUser && roomCode) {
+                try {
+                    const playerRef = doc(db, 'artifacts', appId, 'public', 'data', `tambola_players_${roomCode}`, currentUser.uid);
+                    await setDoc(playerRef, {
+                        ticketCount: tickets.length,
+                        ticketNames: tickets.map(t => t.name),
+                        serializedTickets: JSON.stringify(tickets.map(t => ({ id: t.id, name: t.name, grid: t.grid, daubed: t.daubed })))
+                    }, { merge: true });
+                } catch (e) {}
+            }
+
+            updateAllRoomUI();
+            showModal('🎟️', 'Ticket Added', `Successfully added "${newTkt.name}"!`);
+        }
+
+        function renderPrizexOverviewTab() {
+            const listEl = document.getElementById('prizex-overview-list');
+            if (!listEl) return;
+            const prizeDescriptions = {
+                "Early 5": "First player to mark any 5 called numbers on a single ticket.",
+                "Early 10": "First player to mark any 10 called numbers on a single ticket.",
+                "Top Line": "All 5 numbers in the top row of the ticket called & marked.",
+                "Middle Line": "All 5 numbers in the middle row of the ticket called & marked.",
+                "Bottom Line": "All 5 numbers in the bottom row of the ticket called & marked.",
+                "Full House": "All 15 numbers on the ticket called & marked."
+            };
+            const prizeOrder = ["Early 5", "Early 10", "Top Line", "Middle Line", "Bottom Line", "Full House"];
+
+            listEl.innerHTML = prizeOrder.map(prize => {
+                const win = claimsStatus[prize];
+                const isEnabled = prizesEnabled[prize] !== false;
+                return `
+                    <div class="bg-slate-900 border ${win ? 'border-emerald-500/50 bg-emerald-950/20' : 'border-slate-700'} rounded-xl p-4 flex flex-col justify-between space-y-3">
+                        <div>
+                            <div class="flex justify-between items-start">
+                                <h3 class="font-bold text-white text-base">${escapeHtml(prize)}</h3>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs px-2.5 py-0.5 rounded-full ${win ? 'bg-emerald-900/80 text-emerald-300 font-bold' : 'bg-slate-800 text-slate-400 font-medium'}">
+                                        ${win ? 'Claimed' : (isEnabled ? 'Active' : 'Disabled')}
+                                    </span>
+                                    ${isHost ? `
+                                        <button onclick="togglePrizeEnabled('${prize}')" class="px-2.5 py-0.5 rounded text-xs font-semibold ${isEnabled ? 'bg-rose-900/60 text-rose-300 hover:bg-rose-950 border border-rose-500/30' : 'bg-emerald-900/60 text-emerald-300 hover:bg-emerald-950 border border-emerald-500/30'} transition">
+                                            ${isEnabled ? 'Disable' : 'Enable'}
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-400 mt-1">${escapeHtml(prizeDescriptions[prize] || '')}</p>
+                        </div>
+                        <div class="bg-slate-800/80 border border-slate-700/60 rounded-lg p-3 text-xs">
+                            ${win ? `
+                                <div class="text-emerald-400 font-bold">Winner: ${escapeHtml(win.winnerName)}</div>
+                                <div class="text-slate-300 text-[11px] mt-0.5">Ticket: "${escapeHtml(win.ticketName)}" (${escapeHtml(win.ticketId)})</div>
+                            ` : `
+                                <div class="text-slate-500 italic">${isEnabled ? 'No winner yet. Open for claim!' : 'Prize is currently disabled by host.'}</div>
+                            `}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function togglePrizeEnabled(prizeName) {
+            if (!isHost) return;
+            prizesEnabled[prizeName] = !prizesEnabled[prizeName];
+
+            if (db && roomCode) {
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                    await updateDoc(roomRef, {
+                        prizesEnabled: prizesEnabled
+                    });
+                } catch (e) {
+                    console.error("Error updating prize status:", e);
+                }
+            }
+            updateAllRoomUI();
+        }
+
+        function updateHostPrizeAndEligibilityMonitor() {
+            const prizeOrder = ["Early 5", "Early 10", "Top Line", "Middle Line", "Bottom Line", "Full House"].filter(p => prizesEnabled[p] !== false);
+            const claimedListEl = document.getElementById('host-claimed-list');
+            const claimedCountEl = document.getElementById('host-claimed-count');
+            const eligibleListEl = document.getElementById('host-eligible-list');
+            const eligibleCountEl = document.getElementById('host-eligible-count');
+            if (!claimedListEl || !eligibleListEl) return;
+
+            let claimedTotal = 0;
+            claimedListEl.innerHTML = prizeOrder.map(prize => {
+                const win = claimsStatus[prize];
+                if (win) {
+                    claimedTotal++;
+                    return `
+                        <div class="bg-emerald-950/60 border border-emerald-500/40 rounded-xl px-3 py-2 flex items-center justify-between gap-2">
+                            <div>
+                                <div class="text-xs font-bold text-emerald-300">${escapeHtml(prize)}</div>
+                                <div class="text-[11px] text-slate-300 truncate max-w-[140px]">${escapeHtml(win.winnerName)} (${escapeHtml(win.ticketName)})</div>
+                            </div>
+                            <span class="text-xs font-extrabold text-emerald-400">CLAIMED</span>
+                        </div>
+                    `;
+                }
+                return `
+                    <div class="bg-slate-900/70 border border-slate-700/70 rounded-xl px-3 py-2 flex items-center justify-between">
+                        <span class="text-xs font-semibold text-slate-400">${escapeHtml(prize)}</span>
+                        <span class="text-[11px] text-slate-500">Open</span>
+                    </div>
+                `;
+            }).join('');
+            claimedCountEl.textContent = `${claimedTotal} / ${prizeOrder.length}`;
+
+            const participants = [];
+            roomRoster.forEach(p => {
+                let parsedTickets = [];
+                if (p.serializedTickets) {
+                    try {
+                        parsedTickets = JSON.parse(p.serializedTickets);
+                    } catch (e) {
+                        parsedTickets = [];
+                    }
+                }
+                participants.push({
+                    uid: p.uid,
+                    name: p.name || 'Player',
+                    tickets: parsedTickets
+                });
+            });
+
+            const eligibleItems = [];
+            participants.forEach(player => {
+                (player.tickets || []).forEach(tkt => {
+                    if (!tkt || !tkt.grid) return;
+
+                    const alreadyWonThisTicket = restrictOnePrizePerTicket && Object.values(claimsStatus).some(claim => claim && claim.ticketId === tkt.id);
+                    if (alreadyWonThisTicket) return;
+
+                    const matchedPrizes = prizeOrder.filter(prize => !claimsStatus[prize] && verifyPatternOnTicket(tkt, prize));
+                    if (matchedPrizes.length > 0) {
+                        eligibleItems.push({
+                            playerName: player.name,
+                            ticketId: tkt.id || '',
+                            ticketName: tkt.name || 'Ticket',
+                            prizes: matchedPrizes
+                        });
+                    }
+                });
+            });
+
+            eligibleCountEl.textContent = eligibleItems.length;
+            if (eligibleItems.length === 0) {
+                eligibleListEl.innerHTML = `<p class="text-xs text-slate-500 italic">No tickets eligible for unclaimed prizes yet...</p>`;
+            } else {
+                eligibleListEl.innerHTML = eligibleItems.map(item => `
+                    <div class="bg-amber-500/10 border border-amber-500/40 rounded-xl px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <div class="text-xs font-bold text-white">
+                                ${escapeHtml(item.playerName)}
+                                <span class="text-slate-400 font-normal">• "${escapeHtml(item.ticketName)}"</span>
+                                ${item.ticketId ? `<span class="ml-1 px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 font-mono text-[10px] text-slate-300">${escapeHtml(item.ticketId)}</span>` : ''}
+                            </div>
+                            <div class="text-[11px] text-amber-300 font-semibold mt-0.5">Eligible for: ${item.prizes.map(p => escapeHtml(p)).join(', ')}</div>
+                        </div>
+                        <span class="px-2 py-0.5 rounded bg-amber-500 text-slate-950 font-extrabold text-[10px] uppercase tracking-wider">Ready</span>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function copyRoomCode() {
+            if (!roomCode) return;
+            try {
+                navigator.clipboard.writeText(roomCode).then(() => {
+                    showModal('📋', 'Party Code Copied!', `Party code "${roomCode}" has been copied to your clipboard.`);
+                }).catch(() => {
+                    fallbackCopyToClipboard(roomCode, 'Party Code Copied!', `Party code "${roomCode}" has been copied to your clipboard.`);
+                });
+            } catch (e) {
+                fallbackCopyToClipboard(roomCode, 'Party Code Copied!', `Party code "${roomCode}" has been copied to your clipboard.`);
+            }
+        }
+
+        function copyInviteLink() {
+            const url = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
+            try {
+                navigator.clipboard.writeText(url).then(() => {
+                    showModal('🔗', 'Invite Link Copied!', 'Share this link with your friends so they can join your Party.');
+                }).catch(() => {
+                    fallbackCopyToClipboard(url, 'Invite Link Copied!', 'Share this link with your friends so they can join your Party.');
+                });
+            } catch (e) {
+                fallbackCopyToClipboard(url, 'Invite Link Copied!', 'Share this link with your friends so they can join your Party.');
+            }
+        }
+
+        function copyShareMessage() {
+            const url = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
+            const msg = `Join my live Tambola / Housie game! 🎲\nParty Code: ${roomCode}\nClick here to join: ${url}`;
+            try {
+                navigator.clipboard.writeText(msg).then(() => {
+                    showModal('💬', 'WhatsApp Message Copied!', 'Paste this message into WhatsApp or any chat to invite players.');
+                }).catch(() => {
+                    fallbackCopyToClipboard(msg, 'WhatsApp Message Copied!', 'Paste this message into WhatsApp or any chat to invite players.');
+                });
+            } catch (e) {
+                fallbackCopyToClipboard(msg, 'WhatsApp Message Copied!', 'Paste this message into WhatsApp or any chat to invite players.');
+            }
+        }
+
+        function fallbackCopyToClipboard(text, modalTitle, modalMsg) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    showModal('📋', modalTitle, modalMsg);
+                } else {
+                    showModal('⚠️', 'Copy Failed', 'Unable to copy text automatically. Please copy it manually.');
+                }
+            } catch (err) {
+                showModal('⚠️', 'Copy Failed', 'Unable to copy text automatically. Please copy it manually.');
+            }
+            document.body.removeChild(textarea);
+        }
+
+        function confirmResetRoomNumbers() {
+            if (!isHost) return;
+            const modal = document.getElementById('custom-modal');
+            document.getElementById('modal-icon').textContent = '⚠️';
+            document.getElementById('modal-title').textContent = 'Reset Game Board?';
+            document.getElementById('modal-message').textContent = 'This will clear all called numbers and prize claims for the Party. Are you sure?';
+            document.getElementById('modal-actions').innerHTML = `
+                <button onclick="closeModal()" class="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded-xl text-sm">Cancel</button>
+                <button onclick="closeModal(); resetRoomNumbers();" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-xl text-sm">Reset Board</button>
+            `;
+            modal.classList.remove('hidden');
+        }
+
+        async function resetRoomNumbers() {
+            if (!isHost) return;
+            calledNumbers = [];
+            currentNumber = null;
+            claimsStatus = {
+                "Early 5": null,
+                "Early 10": null,
+                "Top Line": null,
+                "Middle Line": null,
+                "Bottom Line": null,
+                "Full House": null
+            };
+
+            if (db) {
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                    await updateDoc(roomRef, {
+                        calledNumbers: [],
+                        currentNumber: null,
+                        claims: claimsStatus
+                    });
+                } catch (err) {
+                    console.error("Error resetting Party:", err);
+                }
+            }
+            updateAllRoomUI();
+            showModal('🔄', 'Board Reset', 'The game board has been successfully reset.');
+        }
+
+        function returnToLobbyConfirm() {
+            const modal = document.getElementById('custom-modal');
+            document.getElementById('modal-icon').textContent = '🚪';
+            document.getElementById('modal-title').textContent = isHost ? 'End & Permanently Close Party?' : 'Leave Party?';
+            document.getElementById('modal-message').textContent = isHost
+                ? 'Ending the Party will permanently close it and remove all players. Once you leave, this Party cannot be retrieved or reopened.'
+                : 'Are you sure you want to leave this Party?';
+            document.getElementById('modal-actions').innerHTML = `
+                <button onclick="closeModal()" class="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded-xl text-sm">Stay</button>
+                <button onclick="closeModal(); executeLeaveRoom();" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-xl text-sm">${isHost ? 'End Party Permanently' : 'Leave'}</button>
+            `;
+            modal.classList.remove('hidden');
+        }
+
+        async function executeLeaveRoom() {
+            if (unsubscribeRoom) { unsubscribeRoom(); unsubscribeRoom = null; }
+            if (unsubscribePlayers) { unsubscribePlayers(); unsubscribePlayers = null; }
+            if (unsubscribeToken) { unsubscribeToken(); unsubscribeToken = null; }
+            if (statusMonitorInterval) { clearInterval(statusMonitorInterval); statusMonitorInterval = null; }
+
+            const wasHost = isHost;
+            if (isHost && db && roomCode) {
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                    await updateDoc(roomRef, {
+                        roomClosed: true,
+                        status: 'inactive',
+                        closedAt: Date.now(),
+                        hostToken: null
+                    });
+                } catch (e) {
+                    console.error("Error closing Party on leave:", e);
+                }
+
+                if (activeHostTokenIsSingleUse) {
+                    if (activeHostTokenDocRef) {
+                        try {
+                            await updateDoc(activeHostTokenDocRef, {
+                                active: false,
+                                status: 'inactive',
+                                inUse: false,
+                                activeRoomCode: null
+                            });
+                        } catch (e) {}
+                    }
+                }
+            }
+
+            if (!isHost && db && roomCode && currentUser) {
+                try {
+                    const playerRef = doc(db, 'artifacts', appId, 'public', 'data', `tambola_players_${roomCode}`, currentUser.uid);
+                    await setDoc(playerRef, { left: true }, { merge: true });
+                } catch (e) {
+                    console.error("Error cleaning up player record:", e);
+                }
+            }
+
+            clearSessionState();
+            roomCode = null;
+            isHost = false;
+            activeHostTokenCode = null;
+            activeHostTokenDocRef = null;
+            activeHostTokenIsSingleUse = false;
+            calledNumbers = [];
+            currentNumber = null;
+            tickets = [];
+            roomRoster = [];
+            claimsStatus = {
+                "Early 5": null,
+                "Early 10": null,
+                "Top Line": null,
+                "Middle Line": null,
+                "Bottom Line": null,
+                "Full House": null
+            };
+
+            if (autoPlayInterval) {
+                clearInterval(autoPlayInterval);
+                autoPlayInterval = null;
+            }
+
+            document.getElementById('section-lobby').classList.remove('hidden');
+            ['host', 'board', 'player', 'players', 'prizex', 'claims'].forEach(t => {
+                const sec = document.getElementById(`section-${t}`);
+                if (sec) sec.classList.add('hidden');
+            });
+            document.getElementById('nav-tabs').classList.add('hidden');
+            document.getElementById('leave-room-btn').classList.add('hidden');
+            document.getElementById('audio-btn').classList.add('hidden');
+
+            document.getElementById('room-status-pill').innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span><span>Lobby / Setup</span>`;
+
+            try {
+                if (window.history && window.history.replaceState && !window.location.protocol.startsWith('blob:')) {
+                    const cleanUrl = window.location.protocol + '//' + window.location.host + window.location.pathname;
+                    window.history.replaceState({}, document.title, cleanUrl);
+                }
+            } catch (e) {}
+
+            showModal(
+                '👋',
+                wasHost ? 'Party Permanently Closed' : 'Left Party',
+                wasHost
+                    ? 'The Party has been ended and permanently closed for everyone. It can no longer be retrieved.'
+                    : 'All Party data and session details have been refreshed and cleared.'
+            );
+        }
+
+        function showModal(icon, title, message) {
+            const modal = document.getElementById('custom-modal');
+            const extraEl = document.getElementById('modal-body-extra');
+            if (extraEl) {
+                extraEl.classList.add('hidden');
+                extraEl.innerHTML = '';
+            }
+            document.getElementById('modal-icon').textContent = icon;
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-message').textContent = message;
+            document.getElementById('modal-actions').innerHTML = `
+                <button onclick="closeModal()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-sm transition">
+                    Got It
+                </button>
+            `;
+            modal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            const extraEl = document.getElementById('modal-body-extra');
+            if (extraEl) {
+                extraEl.classList.add('hidden');
+                extraEl.innerHTML = '';
+            }
+            document.getElementById('custom-modal').classList.add('hidden');
+        }
+
+        function toggleAudio() {
+            isAudioEnabled = !isAudioEnabled;
+            const btn = document.getElementById('audio-btn');
+            const icon = document.getElementById('audio-icon');
+            if (isAudioEnabled) {
+                icon.textContent = '🔊';
+                btn.classList.add('bg-emerald-600', 'text-white');
+                btn.classList.remove('bg-slate-700', 'text-slate-200');
+                speakNumber(currentNumber || 0, "Voice callout enabled");
+            } else {
+                icon.textContent = '🔇';
+                btn.classList.remove('bg-emerald-600', 'text-white');
+                btn.classList.add('bg-slate-700', 'text-slate-200');
+            }
+        }
+
+        function speakNumber(num, customText) {
+            if (!isAudioEnabled || !('speechSynthesis' in window)) return;
+            window.speechSynthesis.cancel();
+            let textToSpeak = customText || '';
+            if (!customText && num) {
+                const nick = tambolaNicknames[num] || '';
+                textToSpeak = `Number ${num}. ${nick}`;
+            }
+            if (!textToSpeak) return;
+            const utterance = new SpeechSynthesisUtterance(textToSpeak);
+            utterance.rate = 0.9;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function repeatCall() {
+            if (currentNumber) {
+                speakNumber(currentNumber);
+            } else {
+                showModal('ℹ️', 'No Number', 'No number has been drawn yet.');
+            }
+        }
+
+        async function drawNumber() {
+            if (!isHost) return;
+            if (calledNumbers.length >= 90) {
+                showModal('🏁', 'Game Over', 'All 90 numbers have been drawn!');
+                if (autoPlayInterval) {
+                    clearInterval(autoPlayInterval);
+                    autoPlayInterval = null;
+                    document.getElementById('autoplay-icon').textContent = '▶️';
+                    document.getElementById('autoplay-text').textContent = 'Auto';
+                }
+                return;
+            }
+
+            const remaining = [];
+            for (let i = 1; i <= 90; i++) {
+                if (!calledNumbers.includes(i)) remaining.push(i);
+            }
+
+            const randIdx = Math.floor(Math.random() * remaining.length);
+            const nextNum = remaining[randIdx];
+
+            calledNumbers.push(nextNum);
+            currentNumber = nextNum;
+
+            if (db) {
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                    await updateDoc(roomRef, {
+                        calledNumbers: calledNumbers,
+                        currentNumber: currentNumber
+                    });
+                } catch (err) {
+                    console.error("Error updating drawn number:", err);
+                }
+            }
+
+            speakNumber(currentNumber);
+            updateAllRoomUI();
+        }
+
+        async function undrawLastNumber() {
+            if (!isHost) return;
+            if (calledNumbers.length === 0) {
+                showModal('ℹ️', 'No Numbers', 'No numbers have been called yet to undo.');
+                return;
+            }
+
+            calledNumbers.pop();
+            currentNumber = calledNumbers.length > 0 ? calledNumbers[calledNumbers.length - 1] : null;
+
+            if (db) {
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                    await updateDoc(roomRef, {
+                        calledNumbers: calledNumbers,
+                        currentNumber: currentNumber
+                    });
+                } catch (err) {
+                    console.error("Error updating undrawn number:", err);
+                }
+            }
+
+            updateAllRoomUI();
+        }
+
+        async function callManualNumber() {
+            if (!isHost) return;
+            const input = document.getElementById('manual-number-input');
+            const val = parseInt(input.value, 10);
+            input.value = '';
+
+            if (isNaN(val) || val < 1 || val > 90) {
+                showModal('⚠️', 'Invalid Number', 'Please enter a valid number between 1 and 90.');
+                return;
+            }
+            if (calledNumbers.includes(val)) {
+                showModal('⚠️', 'Already Called', `Number ${val} has already been called.`);
+                return;
+            }
+
+            calledNumbers.push(val);
+            currentNumber = val;
+
+            if (db) {
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                    await updateDoc(roomRef, {
+                        calledNumbers: calledNumbers,
+                        currentNumber: currentNumber
+                    });
+                } catch (err) {
+                    console.error("Error calling manual number:", err);
+                }
+            }
+
+            speakNumber(currentNumber);
+            updateAllRoomUI();
+        }
+
+        function toggleAutoPlay() {
+            if (!isHost) return;
+            const btn = document.getElementById('autoplay-btn');
+            const icon = document.getElementById('autoplay-icon');
+            const txt = document.getElementById('autoplay-text');
+
+            if (autoPlayInterval) {
+                clearInterval(autoPlayInterval);
+                autoPlayInterval = null;
+                icon.textContent = '▶️';
+                txt.textContent = 'Auto';
+                btn.classList.remove('bg-rose-600');
+                btn.classList.add('bg-slate-700');
+            } else {
+                const speed = parseInt(document.getElementById('autoplay-speed').value, 10) || 5000;
+                autoPlayInterval = setInterval(() => {
+                    if (calledNumbers.length >= 90) {
+                        clearInterval(autoPlayInterval);
+                        autoPlayInterval = null;
+                        icon.textContent = '▶️';
+                        txt.textContent = 'Auto';
+                        btn.classList.remove('bg-rose-600');
+                        btn.classList.add('bg-slate-700');
+                        return;
+                    }
+                    drawNumber();
+                }, speed);
+                icon.textContent = '⏸️';
+                txt.textContent = 'Stop';
+                btn.classList.remove('bg-slate-700');
+                btn.classList.add('bg-rose-600');
+            }
+        }
+
+        function updateAutoPlaySpeed() {
+            if (autoPlayInterval) {
+                clearInterval(autoPlayInterval);
+                const speed = parseInt(document.getElementById('autoplay-speed').value, 10) || 5000;
+                autoPlayInterval = setInterval(() => {
+                    if (calledNumbers.length >= 90) {
+                        clearInterval(autoPlayInterval);
+                        autoPlayInterval = null;
+                        return;
+                    }
+                    drawNumber();
+                }, speed);
+            }
+        }
+
+        function toggleAutoMark() {
+            isAutoMarkEnabled = !isAutoMarkEnabled;
+            if (isAutoMarkEnabled) {
+                applyAutoMarkToAllTickets();
+            }
+            saveSessionState();
+            updateAllRoomUI();
+        }
+
+        function applyAutoMarkToAllTickets() {
+            const calledSet = new Set(calledNumbers);
+            tickets.forEach(tkt => {
+                for (let r = 0; r < 3; r++) {
+                    for (let c = 0; c < 9; c++) {
+                        const val = tkt.grid[r][c];
+                        if (val > 0 && calledSet.has(val)) {
+                            tkt.daubed[r][c] = true;
+                        }
+                    }
+                }
+            });
+        }
+
+        function buildMasterBoard() {
+            const boardEl = document.getElementById('master-board');
+            if (!boardEl) return;
+            let html = '';
+            for (let i = 1; i <= 90; i++) {
+                html += `
+                    <div id="master-cell-${i}" onclick="callNumberFromBoard(${i})" class="board-number aspect-square rounded-sm bg-slate-900 border border-slate-700/80 flex items-center justify-center font-bold text-[10px] sm:text-[11px] text-slate-400 select-none cursor-pointer hover:border-emerald-500">
+                        ${i}
+                    </div>
+                `;
+            }
+            boardEl.innerHTML = html;
+        }
+
+        function updateHostBoardUI() {
+            const currentEl = document.getElementById('current-number-display');
+            const nickEl = document.getElementById('number-nickname');
+            const remEl = document.getElementById('numbers-remaining');
+            const totalCalledEl = document.getElementById('total-called-count');
+            const recentStrip = document.getElementById('recent-numbers-strip');
+
+            if (currentEl) {
+                currentEl.textContent = currentNumber !== null ? currentNumber : '--';
+            }
+            if (nickEl) {
+                nickEl.textContent = currentNumber !== null ? (tambolaNicknames[currentNumber] || '') : 'Press "Draw Next Number" to start!';
+            }
+            const remCount = 90 - calledNumbers.length;
+            if (remEl) remEl.textContent = `${remCount} remaining`;
+            if (totalCalledEl) totalCalledEl.textContent = `Called: ${calledNumbers.length} / 90`;
+
+            const calledSet = new Set(calledNumbers);
+            for (let i = 1; i <= 90; i++) {
+                const cell = document.getElementById(`master-cell-${i}`);
+                if (!cell) continue;
+                if (calledSet.has(i)) {
+                    if (i === currentNumber) {
+                        cell.className = "board-number aspect-square rounded-sm bg-gradient-to-tr from-amber-500 to-orange-600 text-white border border-white flex items-center justify-center font-black text-[10px] sm:text-[11px] shadow-sm animate-pulse select-none cursor-pointer";
+                    } else {
+                        cell.className = "board-number aspect-square rounded-sm bg-emerald-600 text-white border border-emerald-400 flex items-center justify-center font-bold text-[10px] sm:text-[11px] select-none cursor-pointer";
+                    }
+                } else {
+                    cell.className = "board-number aspect-square rounded-sm bg-slate-900 border border-slate-700/80 flex items-center justify-center font-bold text-[10px] sm:text-[11px] text-slate-400 select-none cursor-pointer hover:border-emerald-500";
+                }
+            }
+
+            if (recentStrip) {
+                if (calledNumbers.length === 0) {
+                    recentStrip.innerHTML = `<span class="text-xs text-slate-500 italic px-2">No numbers called yet...</span>`;
+                } else {
+                    const allCalledReverse = [...calledNumbers].reverse().slice(0, 50);
+                    recentStrip.innerHTML = allCalledReverse.map((num, idx) => `
+                        <div class="flex-shrink-0 w-9 h-9 rounded-xl ${idx === 0 ? 'bg-amber-500 text-slate-950 font-black ring-2 ring-white/50' : 'bg-slate-900 text-emerald-400 border border-slate-700 font-bold'} flex items-center justify-center text-xs shadow">
+                            ${num}
+                        </div>
+                    `).join('');
+                }
+            }
+
+            const statLast = document.getElementById('stat-last');
+            const statProgress = document.getElementById('stat-progress');
+            const statOddEven = document.getElementById('stat-odd-even');
+            const statDecade = document.getElementById('stat-decade');
+
+            if (statLast) statLast.textContent = currentNumber !== null ? currentNumber : '--';
+            if (statProgress) statProgress.textContent = `${Math.round((calledNumbers.length / 90) * 100)}%`;
+            if (statOddEven && currentNumber !== null) {
+                statOddEven.textContent = currentNumber % 2 === 0 ? 'Even' : 'Odd';
+            } else if (statOddEven) {
+                statOddEven.textContent = '--';
+            }
+            if (statDecade && currentNumber !== null) {
+                const dec = currentNumber === 90 ? '81-90' : `${Math.floor((currentNumber - 1) / 10) * 10 + 1}-${Math.floor((currentNumber - 1) / 10) * 10 + 10}`;
+                statDecade.textContent = dec;
+            } else if (statDecade) {
+                statDecade.textContent = '--';
+            }
+        }
+
+        function callNumberFromBoard(num) {
+            if (!isHost) return;
+            if (calledNumbers.includes(num)) return;
+            calledNumbers.push(num);
+            currentNumber = num;
+
+            if (db) {
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                    updateDoc(roomRef, {
+                        calledNumbers: calledNumbers,
+                        currentNumber: currentNumber
+                    });
+                } catch (e) {
+                    console.error("Error calling from board:", e);
+                }
+            }
+            speakNumber(currentNumber);
+            updateAllRoomUI();
+        }
+
+        function updatePlayerCalledStripUI() {
+            const currEl = document.getElementById('player-current-number');
+            const ratioEl = document.getElementById('player-called-ratio');
+            const nickEl = document.getElementById('player-current-nickname');
+            const lastFiveEl = document.getElementById('player-last-five');
+            const calledCountBtn = document.getElementById('player-called-count-btn');
+            const autoMarkStatus = document.getElementById('automark-status-label');
+            const autoMarkSub = document.getElementById('automark-sub-label');
+            const autoMarkBtn = document.getElementById('automark-toggle-btn');
+            const autoMarkKnob = document.getElementById('automark-toggle-knob');
+
+            if (currEl) currEl.textContent = currentNumber !== null ? currentNumber : '--';
+            if (ratioEl) ratioEl.textContent = `${calledNumbers.length}/90`;
+            if (calledCountBtn) calledCountBtn.textContent = calledNumbers.length;
+            if (nickEl) nickEl.textContent = currentNumber !== null ? (tambolaNicknames[currentNumber] || '') : 'Waiting for host to draw a number...';
+
+            if (autoMarkStatus && autoMarkSub && autoMarkBtn && autoMarkKnob) {
+                autoMarkStatus.textContent = isAutoMarkEnabled ? 'Auto-Mark ON' : 'Manual Mark';
+                autoMarkSub.textContent = isAutoMarkEnabled ? 'Auto-daubing called numbers' : 'Tap numbers on ticket to daub';
+                autoMarkBtn.setAttribute('aria-checked', isAutoMarkEnabled ? 'true' : 'false');
+                if (isAutoMarkEnabled) {
+                    autoMarkBtn.classList.remove('bg-slate-700');
+                    autoMarkBtn.classList.add('bg-emerald-600');
+                    autoMarkKnob.classList.remove('translate-x-0');
+                    autoMarkKnob.classList.add('translate-x-5');
+                } else {
+                    autoMarkBtn.classList.remove('bg-emerald-600');
+                    autoMarkBtn.classList.add('bg-slate-700');
+                    autoMarkKnob.classList.remove('translate-x-5');
+                    autoMarkKnob.classList.add('translate-x-0');
+                }
+            }
+
+            if (lastFiveEl) {
+                if (calledNumbers.length === 0) {
+                    lastFiveEl.innerHTML = `<span class="text-xs text-slate-500 italic">None yet</span>`;
+                } else {
+                    const last5 = [...calledNumbers].reverse().slice(0, 5);
+                    lastFiveEl.innerHTML = last5.map(n => `
+                        <span class="w-6 h-6 rounded-lg bg-slate-900 border border-slate-700 text-emerald-400 font-bold text-xs flex items-center justify-center">${n}</span>
+                    `).join('');
+                }
+            }
+
+            const calledSet = new Set(calledNumbers);
+            for (let i = 1; i <= 90; i++) {
+                const cell = document.getElementById(`player-mini-cell-${i}`);
+                if (!cell) continue;
+                if (calledSet.has(i)) {
+                    if (i === currentNumber) {
+                        cell.className = "board-number aspect-square rounded-sm bg-gradient-to-tr from-amber-500 to-orange-600 text-white border border-white flex items-center justify-center font-black text-[10px] sm:text-[11px] shadow-sm animate-pulse select-none";
+                    } else {
+                        cell.className = "board-number aspect-square rounded-sm bg-emerald-600 text-white border border-emerald-400 flex items-center justify-center font-bold text-[10px] sm:text-[11px] select-none";
+                    }
+                } else {
+                    cell.className = "board-number aspect-square rounded-sm bg-slate-900 border border-slate-700/80 flex items-center justify-center font-bold text-[10px] sm:text-[11px] text-slate-400 select-none";
+                }
+            }
+        }
+
+        function buildPlayerMiniBoard() {
+            const board = document.getElementById('player-mini-board');
+            if (!board) return;
+            let html = '';
+            for (let i = 1; i <= 90; i++) {
+                html += `<div id="player-mini-cell-${i}" class="board-number aspect-square rounded-sm bg-slate-900 border border-slate-700/80 flex items-center justify-center font-bold text-[10px] sm:text-[11px] text-slate-400 select-none">${i}</div>`;
+            }
+            board.innerHTML = html;
+        }
+
+        function togglePlayerCalledBoard() {
+            const drawer = document.getElementById('player-called-board-drawer');
+            if (drawer) drawer.classList.toggle('hidden');
+        }
+
+        function renderPlayerTickets() {
+            const container = document.getElementById('tickets-container');
+            if (!container) return;
+
+            if (tickets.length === 0) {
+                container.innerHTML = `<p class="text-xs text-slate-500 italic">No active tickets remaining.</p>`;
+                return;
+            }
+
+            const calledSet = new Set(calledNumbers);
+            const prizeOrder = ["Early 5", "Early 10", "Top Line", "Middle Line", "Bottom Line", "Full House"].filter(p => prizesEnabled[p] !== false);
+
+            container.innerHTML = tickets.map((ticket, tIdx) => {
+                let markedCount = 0;
+                for (let r = 0; r < 3; r++) {
+                    for (let c = 0; c < 9; c++) {
+                        const val = ticket.grid[r][c];
+                        if (val > 0 && (ticket.daubed[r][c] || calledSet.has(val))) {
+                            markedCount++;
+                        }
+                    }
+                }
+
+                const alreadyWonThisTicket = restrictOnePrizePerTicket && Object.values(claimsStatus).some(claim => claim && claim.ticketId === ticket.id);
+                const eligiblePrizesForTicket = alreadyWonThisTicket ? [] : prizeOrder.filter(prize => !claimsStatus[prize] && verifyPatternOnTicket(ticket, prize));
+
+                const gridHtml = ticket.grid.map((rowArr, rIdx) =>
+                    rowArr.map((val, cIdx) => {
+                        if (val === 0) {
+                            return `<div class="aspect-square rounded-lg bg-slate-900/40 border border-slate-800/80"></div>`;
+                        }
+                        const isCalled = calledSet.has(val);
+                        const isDaubed = ticket.daubed[rIdx][cIdx] || (isCalled && isAutoMarkEnabled);
+
+                        let badgeClass = "bg-slate-900 text-slate-200 border-slate-700 hover:border-emerald-500 cursor-pointer";
+                        if (isDaubed) {
+                            badgeClass = "bg-gradient-to-tr from-emerald-600 to-teal-500 text-white border-emerald-400 font-black shadow-md scale-95";
+                        } else if (isCalled) {
+                            badgeClass = "bg-slate-800 text-amber-300 border-amber-500/60 ring-2 ring-amber-500/30 cursor-pointer animate-pulse";
+                        }
+
+                        return `
+                            <div onclick="toggleCellDaub(${tIdx}, ${rIdx}, ${cIdx})" class="ticket-cell aspect-square rounded-xl font-bold text-xs sm:text-base flex items-center justify-center border transition select-none ${badgeClass}">
+                                ${val}
+                            </div>
+                        `;
+                    }).join('')
+                ).join('');
+
+                const claimButtonsHtml = eligiblePrizesForTicket.map(prize => `
+                    <button onclick="claimPrizeForTicket(${tIdx}, '${prize}')" class="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-bold rounded-xl text-xs shadow-lg animate-pulse flex items-center gap-1">
+                        <span>🏆</span>
+                        <span>Claim ${prize}</span>
+                    </button>
+                `).join('');
+
+                return `
+                    <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+                        <div class="flex flex-wrap justify-between items-center gap-2">
+                            <div class="flex items-center gap-2">
+                                <input type="text" value="${escapeHtml(ticket.name)}" onchange="updateTicketName(${tIdx}, this.value)" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-sm font-bold text-white focus:outline-none focus:border-emerald-500 max-w-[160px]">
+                                <span class="text-[11px] font-mono text-indigo-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-700">${ticket.id}</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-900 text-emerald-400 border border-slate-700">
+                                    ${markedCount} / 15 Called
+                                </span>
+                            </div>
+                        </div>
+
+                        ${eligiblePrizesForTicket.length > 0 ? `
+                            <div class="flex flex-wrap items-center gap-2 bg-amber-500/10 border border-amber-500/40 p-2.5 rounded-xl">
+                                <span class="text-xs font-bold text-amber-300">🎉 Eligible for:</span>
+                                <div class="flex flex-wrap gap-2">
+                                    ${claimButtonsHtml}
+                                </div>
+                            </div>
+                        ` : ''}
+
+                        <div class="grid grid-cols-9 gap-1.5 sm:gap-2 bg-slate-950/60 p-3 rounded-2xl border border-slate-800">
+                            ${gridHtml}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function claimPrizeForTicket(tIdx, prizeName) {
+            const ticket = tickets[tIdx];
+            if (!ticket) return;
+
+            if (claimsStatus[prizeName]) {
+                showModal('ℹ️', 'Already Claimed', `${prizeName} has already been claimed by ${claimsStatus[prizeName].winnerName}!`);
+                return;
+            }
+
+            if (restrictOnePrizePerTicket && Object.values(claimsStatus).some(claim => claim && claim.ticketId === ticket.id)) {
+                showModal('⚠️', 'Ticket Restricted', `This ticket has already won a prize and cannot claim another one under the room rules.`);
+                return;
+            }
+
+            const isValid = verifyPatternOnTicket(ticket, prizeName);
+            if (!isValid) {
+                showModal('❌', 'Claim Rejected', `Your ticket "${ticket.name}" does not yet satisfy the required pattern for ${prizeName}.`);
+                return;
+            }
+
+            claimsStatus[prizeName] = {
+                winnerName: playerName,
+                ticketName: ticket.name,
+                ticketId: ticket.id,
+                claimedAt: Date.now()
+            };
+
+            if (db) {
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                    await updateDoc(roomRef, {
+                        claims: claimsStatus
+                    });
+                } catch (err) {
+                    console.error("Error submitting claim:", err);
+                }
+            }
+
+            updateClaimsUI();
+            updateHostPrizeAndEligibilityMonitor();
+            updateAllRoomUI();
+            showModal('🏆', 'Prize Claimed Successfully!', `Congratulations! Your claim for ${prizeName} with ticket "${ticket.name}" has been verified!`);
+        }
+
+        function updateTicketName(idx, newName) {
+            if (tickets[idx]) {
+                tickets[idx].name = newName.trim() || `Ticket ${idx + 1}`;
+                saveSessionState();
+                populateClaimTicketSelector();
+                if (isHost) updateAllRoomUI();
+            }
+        }
+
+        function toggleCellDaub(tIdx, rIdx, cIdx) {
+            if (isAutoMarkEnabled) {
+                return;
+            }
+            const ticket = tickets[tIdx];
+            if (!ticket) return;
+            const val = ticket.grid[rIdx][cIdx];
+            if (val === 0) return;
+
+            if (!calledNumbers.includes(val)) {
+                showModal('⚠️', 'Number Not Called', `Number ${val} has not been called yet by the host!`);
+                return;
+            }
+
+            ticket.daubed[rIdx][cIdx] = !ticket.daubed[rIdx][cIdx];
+            saveSessionState();
+            renderPlayerTickets();
+            if (isHost) {
+                updateHostPrizeAndEligibilityMonitor();
+            }
+        }
+
+        function clearAllDaubs() {
+            tickets.forEach(tkt => {
+                tkt.daubed = Array.from({ length: 3 }, () => Array(9).fill(false));
+            });
+            saveSessionState();
+            renderPlayerTickets();
+            if (isHost) {
+                updateHostPrizeAndEligibilityMonitor();
+            }
+        }
+
+        function populateClaimTicketSelector() {
+            const sel = document.getElementById('claim-ticket-selector');
+            if (!sel) return;
+            if (tickets.length === 0) {
+                sel.innerHTML = `<option value="">No tickets available</option>`;
+                return;
+            }
+            sel.innerHTML = tickets.map((t, idx) => `
+                <option value="${idx}">${escapeHtml(t.name)} (${t.id})</option>
+            `).join('');
+        }
+
+        function verifyPatternOnTicket(ticket, prizeName) {
+            const calledSet = new Set(calledNumbers);
+            const grid = ticket.grid;
+            const daubed = ticket.daubed;
+
+            const isMarked = (r, c) => {
+                const val = grid[r][c];
+                if (val === 0) return false;
+                return daubed[r][c] || calledSet.has(val);
+            };
+
+            if (prizeName === "Early 5") {
+                let count = 0;
+                for (let r = 0; r < 3; r++) {
+                    for (let c = 0; c < 9; c++) {
+                        if (isMarked(r, c)) count++;
+                    }
+                }
+                return count >= 5;
+            }
+
+            if (prizeName === "Early 10") {
+                let count = 0;
+                for (let r = 0; r < 3; r++) {
+                    for (let c = 0; c < 9; c++) {
+                        if (isMarked(r, c)) count++;
+                    }
+                }
+                return count >= 10;
+            }
+
+            if (prizeName === "Top Line") {
+                for (let c = 0; c < 9; c++) {
+                    if (grid[0][c] > 0 && !isMarked(0, c)) return false;
+                }
+                return true;
+            }
+
+            if (prizeName === "Middle Line") {
+                for (let c = 0; c < 9; c++) {
+                    if (grid[1][c] > 0 && !isMarked(1, c)) return false;
+                }
+                return true;
+            }
+
+            if (prizeName === "Bottom Line") {
+                for (let c = 0; c < 9; c++) {
+                    if (grid[2][c] > 0 && !isMarked(2, c)) return false;
+                }
+                return true;
+            }
+
+            if (prizeName === "Full House") {
+                for (let r = 0; r < 3; r++) {
+                    for (let c = 0; c < 9; c++) {
+                        if (grid[r][c] > 0 && !isMarked(r, c)) return false;
+                    }
+                }
+                return true;
+            }
+
+            return false;
+        }
+
+        async function claimPrize(prizeName) {
+            if (claimsStatus[prizeName]) {
+                showModal('ℹ️', 'Already Claimed', `${prizeName} has already been claimed by ${claimsStatus[prizeName].winnerName}!`);
+                return;
+            }
+
+            const sel = document.getElementById('claim-ticket-selector');
+            if (!sel || sel.value === "") {
+                showModal('⚠️', 'Select Ticket', 'Please select one of your playing tickets to claim the prize.');
+                return;
+            }
+
+            const tIdx = parseInt(sel.value, 10);
+            const ticket = tickets[tIdx];
+            if (!ticket) {
+                showModal('⚠️', 'Invalid Ticket', 'Selected ticket not found.');
+                return;
+            }
+
+            if (restrictOnePrizePerTicket && Object.values(claimsStatus).some(claim => claim && claim.ticketId === ticket.id)) {
+                showModal('⚠️', 'Ticket Restricted', `This ticket has already won a prize and cannot claim another one under the room rules.`);
+                return;
+            }
+
+            const isValid = verifyPatternOnTicket(ticket, prizeName);
+            if (!isValid) {
+                showModal('❌', 'Claim Rejected', `Your ticket "${ticket.name}" does not yet satisfy the required pattern for ${prizeName}.`);
+                return;
+            }
+
+            claimsStatus[prizeName] = {
+                winnerName: playerName,
+                ticketName: ticket.name,
+                ticketId: ticket.id,
+                claimedAt: Date.now()
+            };
+
+            if (db) {
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
+                    await updateDoc(roomRef, {
+                        claims: claimsStatus
+                    });
+                } catch (err) {
+                    console.error("Error submitting claim:", err);
+                }
+            }
+
+            updateClaimsUI();
+            updateHostPrizeAndEligibilityMonitor();
+            showModal('🏆', 'Prize Claimed Successfully!', `Congratulations! Your claim for ${prizeName} with ticket "${ticket.name}" has been verified!`);
+        }
+
+        function updateClaimsUI() {
+            const prizeOrder = ["Early 5", "Early 10", "Top Line", "Middle Line", "Bottom Line", "Full House"].filter(p => prizesEnabled[p] !== false);
+            const logEl = document.getElementById('claim-log');
+            const claimsGridEl = document.getElementById('claims-grid');
+
+            if (claimsGridEl) {
+                const prizeDetails = {
+                    "Early 5": { title: "Early 5", badge: "Any 5 Numbers", desc: "First player to mark any 5 called numbers on a single ticket." },
+                    "Early 10": { title: "Early 10", badge: "Any 10 Numbers", desc: "First player to mark any 10 called numbers on a single ticket." },
+                    "Top Line": { title: "Top Line", badge: "Row 1", desc: "All 5 numbers in the top row of the selected ticket called & marked." },
+                    "Middle Line": { title: "Middle Line", badge: "Row 2", desc: "All 5 numbers in the middle row of the selected ticket called & marked." },
+                    "Bottom Line": { title: "Bottom Line", badge: "Row 3", desc: "All 5 numbers in the bottom row of the selected ticket called & marked." },
+                    "Full House": { title: "Full House", badge: "All 15 Numbers", desc: "All 15 numbers on the selected ticket called & marked!" }
+                };
+
+                const enabledPrizes = ["Early 5", "Early 10", "Top Line", "Middle Line", "Bottom Line", "Full House"].filter(p => prizesEnabled[p] !== false);
+                claimsGridEl.innerHTML = enabledPrizes.map(p => {
+                    const info = prizeDetails[p];
+                    const win = claimsStatus[p];
+                    const pKey = p.toLowerCase().replace(/\s+/g, '-');
+                    return `
+                        <div class="bg-slate-900/70 border border-slate-700 rounded-xl p-5 flex flex-col justify-between">
+                            <div>
+                                <div class="flex justify-between items-start mb-2">
+                                    <h3 class="font-bold text-white text-base">${escapeHtml(info.title)}</h3>
+                                    <span class="text-xs px-2.5 py-1 rounded-full bg-emerald-900/60 text-emerald-300 font-semibold">${escapeHtml(info.badge)}</span>
+                                </div>
+                                <p class="text-xs text-slate-400 mb-4">${escapeHtml(info.desc)}</p>
+                            </div>
+                            <button onclick="claimPrize('${p}')" id="claim-${pKey}" ${win ? 'disabled' : ''} class="w-full py-2.5 ${win ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700' : 'bg-indigo-600 hover:bg-indigo-500 text-white font-semibold'} rounded-lg text-sm transition shadow">
+                                ${win ? `Claimed by ${win.winnerName}` : `Claim ${p} 🎉`}
+                            </button>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            const verifiedClaims = prizeOrder.filter(p => claimsStatus[p] !== null);
+            if (verifiedClaims.length === 0) {
+                if (logEl) logEl.innerHTML = `<p class="italic text-slate-500">No claims verified yet. Be the first to win!</p>`;
+            } else {
+                if (logEl) {
+                    logEl.innerHTML = verifiedClaims.map(p => {
+                        const win = claimsStatus[p];
+                        if (!win) return '';
+                        return `
+                            <div class="bg-emerald-950/60 border border-emerald-500/40 rounded-xl p-3 flex items-center justify-between gap-3">
+                                <div class="flex items-center gap-3">
+                                    <span class="text-2xl">🏆</span>
+                                    <div>
+                                        <div class="text-xs uppercase tracking-wider font-extrabold text-emerald-400">${escapeHtml(p)}</div>
+                                        <div class="text-sm font-bold text-white">${escapeHtml(win.winnerName)} <span class="text-slate-400 font-normal">• "${escapeHtml(win.ticketName)}"</span></div>
+                                    </div>
+                                </div>
+                                <span class="px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-extrabold text-xs">VERIFIED</span>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            }
+        }
+
+        function toggleHostRuleOnePrizePerTicket() {
+            if (!isHost) return;
+            restrictOnePrizePerTicket = !restrictOnePrizePerTicket;
+            updateHostRuleUI();
+
+            if (db && roomCode) {
+                updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode), {
+                    restrictOnePrizePerTicket: restrictOnePrizePerTicket
+                }).catch(e => console.error("Error updating host rule:", e));
+            }
+        }
+
+        function toggleHostRuleMultiTickets() {
+            if (!isHost) return;
+            allowMultiTickets = !allowMultiTickets;
+            updateHostRuleUI();
+
+            if (db && roomCode) {
+                updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode), {
+                    allowMultiTickets: allowMultiTickets
+                }).catch(e => console.error("Error updating multi-tickets rule:", e));
+            }
+        }
+
+        function toggleHostRuleLockRoom() {
+            if (!isHost) return;
+            lockRoomNewPlayers = !lockRoomNewPlayers;
+            updateHostRuleUI();
+
+            if (db && roomCode) {
+                updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode), {
+                    lockRoomNewPlayers: lockRoomNewPlayers
+                }).catch(e => console.error("Error updating room lock rule:", e));
+            }
+        }
+
+        function updateHostRuleUI() {
+            const btn = document.getElementById('host-rule-one-prize-btn');
+            const knob = document.getElementById('host-rule-one-prize-knob');
+            if (btn && knob) {
+                btn.setAttribute('aria-checked', restrictOnePrizePerTicket ? 'true' : 'false');
+                if (restrictOnePrizePerTicket) {
+                    btn.classList.remove('bg-slate-700');
+                    btn.classList.add('bg-emerald-600');
+                    knob.classList.remove('translate-x-0');
+                    knob.classList.add('translate-x-5');
+                } else {
+                    btn.classList.remove('bg-emerald-600');
+                    btn.classList.add('bg-slate-700');
+                    knob.classList.remove('translate-x-5');
+                    knob.classList.add('translate-x-0');
+                }
+            }
+
+            const multiBtn = document.getElementById('host-rule-multi-tickets-btn');
+            const multiKnob = document.getElementById('host-rule-multi-tickets-knob');
+            if (multiBtn && multiKnob) {
+                multiBtn.setAttribute('aria-checked', allowMultiTickets ? 'true' : 'false');
+                if (allowMultiTickets) {
+                    multiBtn.classList.remove('bg-slate-700');
+                    multiBtn.classList.add('bg-emerald-600');
+                    multiKnob.classList.remove('translate-x-0');
+                    multiKnob.classList.add('translate-x-5');
+                } else {
+                    multiBtn.classList.remove('bg-emerald-600');
+                    multiBtn.classList.add('bg-slate-700');
+                    multiKnob.classList.remove('translate-x-5');
+                    multiKnob.classList.add('translate-x-0');
+                }
+            }
+
+            const lockBtn = document.getElementById('host-rule-lock-room-btn');
+            const lockKnob = document.getElementById('host-rule-lock-room-knob');
+            if (lockBtn && lockKnob) {
+                lockBtn.setAttribute('aria-checked', lockRoomNewPlayers ? 'true' : 'false');
+                if (lockRoomNewPlayers) {
+                    lockBtn.classList.remove('bg-slate-700');
+                    lockBtn.classList.add('bg-emerald-600');
+                    lockKnob.classList.remove('translate-x-0');
+                    lockKnob.classList.add('translate-x-5');
+                } else {
+                    lockBtn.classList.remove('bg-emerald-600');
+                    lockBtn.classList.add('bg-slate-700');
+                    lockKnob.classList.remove('translate-x-5');
+                    lockKnob.classList.add('translate-x-0');
+                }
+            }
+
+            updateHostPrizeAndEligibilityMonitor();
+            updateAddTicketButtonUI();
+        }
+
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        window.createMultiplayerGame = createMultiplayerGame;
+        window.joinExistingGame = joinExistingGame;
+        window.switchTab = switchTab;
+        window.toggleAudio = toggleAudio;
+        window.drawNumber = drawNumber;
+        window.undrawLastNumber = undrawLastNumber;
+        window.callManualNumber = callManualNumber;
+        window.toggleAutoPlay = toggleAutoPlay;
+        window.updateAutoPlaySpeed = updateAutoPlaySpeed;
+        window.repeatCall = repeatCall;
+        window.toggleAutoMark = toggleAutoMark;
+        window.callNumberFromBoard = callNumberFromBoard;
+        window.togglePlayerCalledBoard = togglePlayerCalledBoard;
+        window.updateTicketName = updateTicketName;
+        window.toggleCellDaub = toggleCellDaub;
+        window.clearAllDaubs = clearAllDaubs;
+        window.claimPrize = claimPrize;
+        window.claimPrizeForTicket = claimPrizeForTicket;
+        window.toggleHostRuleOnePrizePerTicket = toggleHostRuleOnePrizePerTicket;
+        window.toggleHostRuleMultiTickets = toggleHostRuleMultiTickets;
+        window.toggleHostRuleLockRoom = toggleHostRuleLockRoom;
+        window.addNewPlayerTicket = addNewPlayerTicket;
+        window.copyRoomCode = copyRoomCode;
+        window.copyInviteLink = copyInviteLink;
+        window.copyShareMessage = copyShareMessage;
+        window.confirmResetRoomNumbers = confirmResetRoomNumbers;
+        window.resetRoomNumbers = resetRoomNumbers;
+        window.returnToLobbyConfirm = returnToLobbyConfirm;
+        window.executeLeaveRoom = executeLeaveRoom;
+        window.closeModal = closeModal;
+        window.forceRefreshRoomData = forceRefreshRoomData;
+        window.togglePrizeEnabled = togglePrizeEnabled;
+        window.promptBuyTicketPackage = promptBuyTicketPackage;
+        window.submitTicketPackagePurchase = submitTicketPackagePurchase;
+        window.completeBuyTicketPackage = completeBuyTicketPackage;
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && roomCode && db) {
+                forceRefreshRoomData(false);
+                verifyActivePartyAndTokenHealth();
+            }
+        });
+
+        window.addEventListener('pageshow', () => {
+            if (roomCode && db) {
+                forceRefreshRoomData(false);
+            }
+        });
+
+        window.addEventListener('focus', () => {
+            if (roomCode && db) {
+                forceRefreshRoomData(false);
+            }
+        });
+
+        window.onload = async function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const inviteCode = urlParams.get('room');
+            if (inviteCode) {
+                document.getElementById('join-room-code').value = inviteCode.toUpperCase();
+            }
+            await checkStripePaymentReturn();
+            await attemptAutoReconnect();
+        };
+    </script>
+</body>
+</html>
