@@ -41,9 +41,21 @@ try {
   
 const db = getDb();
 
-identity = await db.app
-  .auth()
+
+const db = getDb();
+
+const { getApps } = await import('firebase-admin/app');
+const { getAuth } = await import('firebase-admin/auth');
+
+const firebaseApp = getApps()[0];
+
+if (!firebaseApp) {
+  throw new Error('Firebase Admin app was not initialized.');
+}
+
+identity = await getAuth(firebaseApp)
   .verifyIdToken(match[1], true);
+
 
 } catch (err) {
   console.error('Admin Firebase token verification failed:', {
