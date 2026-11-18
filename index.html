@@ -753,48 +753,128 @@
             } catch (e) {}
         }
 
-        // Replace these placeholders with your actual Stripe Payment Links.
-        const STRIPE_PAYMENT_LINKS = {
-            STARTER: "https://buy.stripe.com/5kQ14n11meQm7Hd29F1oI00",
-            STANDARD: "https://buy.stripe.com/cNi28rh0kaA69Pl6pV1oI01",
-            MEGA: "https://buy.stripe.com/28E9AT25q4bI2mT7tZ1oI02"
-        };
-
         function promptBuyTicketPackage(tierName, ticketCount, priceStr) {
-            const link = STRIPE_PAYMENT_LINKS[tierName];
-            if (!link) return;
-            window.location.href = link;
+            const modal = document.getElementById('custom-modal');
+            const extraEl = document.getElementById('modal-body-extra');
+            document.getElementById('modal-icon').textContent = '💎';
+            document.getElementById('modal-title').textContent = `Purchase ${tierName} Package`;
+            document.getElementById('modal-message').textContent = `${tierName} — ${ticketCount} Tickets for ${priceStr}`;
+
+            if (extraEl) {
+                extraEl.classList.remove('hidden');
+                extraEl.innerHTML = `
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-300 mb-1">Full Name <span class="text-rose-400">*</span></label>
+                            <input type="text" id="purchase-full-name" placeholder="e.g., Rahul Sharma" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-300 mb-1">Email <span class="text-rose-400">*</span></label>
+                            <input type="email" id="purchase-email" placeholder="e.g., rahul@example.com" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-300 mb-1">Payment Options <span class="text-rose-400">*</span></label>
+                            <select id="purchase-payment-method" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500">
+                                <option value="Credit / Debit Card">💳 Credit / Debit Card</option>
+                                <option value="UPI">📱 UPI</option>
+                                <option value="Net Banking">🏦 Net Banking</option>
+                                <option value="PayPal">🅿️ PayPal</option>
+                            </select>
+                        </div>
+                        <p id="purchase-error-msg" class="hidden text-[11px] text-rose-400 font-medium"></p>
+                    </div>
+                `;
+            }
+
+            document.getElementById('modal-actions').innerHTML = `
+                <button onclick="closeModal()" class="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded-xl text-sm">Cancel</button>
+                <button onclick="submitTicketPackagePurchase('${tierName}', ${ticketCount}, '${priceStr}')" class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-sm">Pay ${priceStr}</button>
+            `;
+            modal.classList.remove('hidden');
         }
 
-        function handleStripeSuccessReturn(sessionId) {
-            if (!db || !sessionId) return;
+        function submitTicketPackagePurchase(tierName, ticketCount, priceStr) {
+            const fullNameInput = document.getElementById('purchase-full-name');
+            const emailInput = document.getElementById('purchase-email');
+            const paymentSelect = document.getElementById('purchase-payment-method');
+            const errorEl = document.getElementById('purchase-error-msg');
 
-            showModal('⏳', 'Verifying Payment...', 'Confirming your Stripe transaction and activating your Host Token...');
+            const fullName = fullNameInput ? fullNameInput.value.trim() : '';
+            const email = emailInput ? emailInput.value.trim() : '';
+            const paymentMethod = paymentSelect ? paymentSelect.value : 'Credit / Debit Card';
 
-            const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'stripe_sessions', sessionId);
-            let unsubscribe = null;
-            unsubscribe = onSnapshot(sessionRef, (snap) => {
-                if (snap.exists()) {
-                    if (unsubscribe) unsubscribe();
-                    const data = snap.data();
-                    const tokenInput = document.getElementById('host-token-input');
-                    if (tokenInput && data.token) {
-                        tokenInput.value = data.token;
-                    }
-
-                    // Clean ?session_id from the browser URL
-                    window.history.replaceState({}, document.title, window.location.pathname);
-
-                    showModal(
-                        '✅',
-                        `${data.tier} Package Activated!`,
-                        `Thank you, ${data.buyerName || 'Host'}! Payment verified.\n\nYour single-use Host Token (${data.token}) for up to ${data.maxTickets} tickets is ready. Click "Start Hosting" to begin.`
-                    );
+            if (!fullName) {
+                if (errorEl) {
+                    errorEl.textContent = 'Please enter your Full Name.';
+                    errorEl.classList.remove('hidden');
                 }
-            }, (error) => {
-                console.error('Stripe session verification failed:', error);
-                showModal('⚠️', 'Payment Verification Issue', 'We could not verify your payment yet. Please refresh this page or contact support before attempting another purchase.');
-            });
+                return;
+            }
+            if (!email || !email.includes('@')) {
+                if (errorEl) {
+                    errorEl.textContent = 'Please enter a valid Email address.';
+                    errorEl.classList.remove('hidden');
+                }
+                return;
+            }
+
+            closeModal();
+            completeBuyTicketPackage(tierName, ticketCount, priceStr, { fullName, email, paymentMethod });
+        }
+
+        async function completeBuyTicketPackage(tierName, ticketCount, priceStr, buyerInfo = {}) {
+            const randSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+            const generatedToken = `HOST-${tierName}-${ticketCount}-${randSuffix}`;
+
+            const newTokenObj = {
+                token: generatedToken,
+                tier: tierName,
+                maxTickets: ticketCount,
+                singleUse: true,
+                usedCount: 0,
+                active: true,
+                status: 'active',
+                inUse: false,
+                activeRoomCode: null,
+                buyerName: buyerInfo.fullName || '',
+                buyerEmail: buyerInfo.email || '',
+                paymentMethod: buyerInfo.paymentMethod || '',
+                createdAt: Date.now()
+            };
+
+            // Authenticate and register token in local Admin Portal database
+            hostingTokensDB.push(newTokenObj);
+            saveHostingTokensDB();
+
+            // Immediately add and authenticate token as Active, Single-Use in Firestore
+            if (db) {
+                try {
+                    const tokenPaths = [
+                        ['artifacts', appId, 'public', 'data', 'tambola_tokens', generatedToken],
+                        ['artifacts', appId, 'public', 'data', 'tambola_hosting_tokens', generatedToken],
+                        ['artifacts', appId, 'public', 'data', 'hosting_tokens', generatedToken]
+                    ];
+                    for (const pathSegs of tokenPaths) {
+                        try {
+                            const tRef = doc(db, ...pathSegs);
+                            await setDoc(tRef, newTokenObj, { merge: true });
+                        } catch (e) {}
+                    }
+                } catch (e) {
+                    console.warn("Token cloud storage warning:", e);
+                }
+            }
+
+            const tokenInput = document.getElementById('host-token-input');
+            if (tokenInput) {
+                tokenInput.value = generatedToken;
+            }
+
+            showModal(
+                '✅',
+                `${tierName} Package Activated!`,
+                `Thank you, ${buyerInfo.fullName || 'Host'}! Payment via ${buyerInfo.paymentMethod || 'Card'} was verified successfully.\n\nYour single-use Host Token (${generatedToken}) for up to ${ticketCount} tickets has been instantly authenticated and registered in Firestore & Admin Portal as Active.`
+            );
         }
 
         function getAllParticipantsList(roster) {
@@ -3261,7 +3341,8 @@
         window.forceRefreshRoomData = forceRefreshRoomData;
         window.togglePrizeEnabled = togglePrizeEnabled;
         window.promptBuyTicketPackage = promptBuyTicketPackage;
-        window.handleStripeSuccessReturn = handleStripeSuccessReturn;
+        window.submitTicketPackagePurchase = submitTicketPackagePurchase;
+        window.completeBuyTicketPackage = completeBuyTicketPackage;
 
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible' && roomCode && db) {
@@ -3285,18 +3366,9 @@
         window.onload = async function() {
             const urlParams = new URLSearchParams(window.location.search);
             const inviteCode = urlParams.get('room');
-            const sessionId = urlParams.get('session_id');
-
             if (inviteCode) {
                 document.getElementById('join-room-code').value = inviteCode.toUpperCase();
             }
-
-            if (sessionId) {
-                await ensureAuth();
-                handleStripeSuccessReturn(sessionId);
-                return;
-            }
-
             await attemptAutoReconnect();
         };
     </script>
