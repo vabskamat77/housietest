@@ -2567,104 +2567,145 @@ async function executeLeaveRoom() {
             }
         }
 
+
+
+        let numberCallInProgress = false;
+
+        async function callNumberWithServer(action, number = null) {
+            if (!isHost || !roomCode) return null;
+
+            // Prevent overlapping calls, including autoplay requests.
+            if (numberCallInProgress) return null;
+
+            numberCallInProgress = true;
+
+            try {
+                const user = await ensureAuth();
+
+                if (!auth?.currentUser || user?.isFallback) {
+                    throw new Error(
+                        'Firebase login is required to call numbers.'
+                    );
+                }
+
+                const idToken =
+                    await auth.currentUser.getIdToken();
+
+                const response = await fetch(
+                    `${TAMBOLA_API_BASE}/api/call-number`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${idToken}`
+                        },
+                        body: JSON.stringify({
+                            roomCode,
+                            action,
+                            number
+                        })
+                    }
+                );
+
+                const data = await response.json();
+
+                if (!response.ok || !data.ok) {
+                    throw new Error(
+                        data.error || 'Number calling failed.'
+                    );
+                }
+
+                // Only accept the numbers returned by the server.
+                calledNumbers = data.calledNumbers;
+                currentNumber = data.number;
+
+                updateAllRoomUI();
+
+                if (action !== 'undo' && currentNumber !== null) {
+                    speakNumber(currentNumber);
+                }
+
+                return data;
+
+            } catch (err) {
+                console.error('Secure number calling error:', err);
+
+                // Stop autoplay when the server rejects a call.
+                if (autoPlayInterval) {
+                    toggleAutoPlay();
+                }
+
+                showModal(
+                    '❌',
+                    'Number Calling Failed',
+                    err.message || 'Please try again.'
+                );
+
+                return null;
+
+            } finally {
+                numberCallInProgress = false;
+            }
+        }
+
+        
+
         async function drawNumber() {
             if (!isHost) return;
+
             if (calledNumbers.length >= 90) {
-                showModal('🏁', 'Game Over', 'All 90 numbers have been drawn!');
-                if (autoPlayInterval) {
-                    clearInterval(autoPlayInterval);
-                    autoPlayInterval = null;
-                    document.getElementById('autoplay-icon').textContent = '▶️';
-                    document.getElementById('autoplay-text').textContent = 'Auto';
-                }
+                showModal(
+                    '🏁',
+                    'Game Over',
+                    'All 90 numbers have been drawn!'
+                );
+
+                if (autoPlayInterval) toggleAutoPlay();
                 return;
             }
 
-            const remaining = [];
-            for (let i = 1; i <= 90; i++) {
-                if (!calledNumbers.includes(i)) remaining.push(i);
-            }
-
-            const randIdx = Math.floor(Math.random() * remaining.length);
-            const nextNum = remaining[randIdx];
-
-            calledNumbers.push(nextNum);
-            currentNumber = nextNum;
-
-            if (db) {
-                try {
-                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
-                    await updateDoc(roomRef, {
-                        calledNumbers: calledNumbers,
-                        currentNumber: currentNumber
-                    });
-                } catch (err) {
-                    console.error("Error updating drawn number:", err);
-                }
-            }
-
-            speakNumber(currentNumber);
-            updateAllRoomUI();
+            await callNumberWithServer('random');
         }
 
         async function undrawLastNumber() {
             if (!isHost) return;
+
             if (calledNumbers.length === 0) {
-                showModal('ℹ️', 'No Numbers', 'No numbers have been called yet to undo.');
+                showModal(
+                    'ℹ️',
+                    'No Numbers',
+                    'No numbers have been called yet to undo.'
+                );
                 return;
             }
 
-            calledNumbers.pop();
-            currentNumber = calledNumbers.length > 0 ? calledNumbers[calledNumbers.length - 1] : null;
-
-            if (db) {
-                try {
-                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
-                    await updateDoc(roomRef, {
-                        calledNumbers: calledNumbers,
-                        currentNumber: currentNumber
-                    });
-                } catch (err) {
-                    console.error("Error updating undrawn number:", err);
-                }
-            }
-
-            updateAllRoomUI();
+            await callNumberWithServer('undo');
         }
 
         async function callManualNumber() {
             if (!isHost) return;
-            const input = document.getElementById('manual-number-input');
-            const val = parseInt(input.value, 10);
-            input.value = '';
 
-            if (isNaN(val) || val < 1 || val > 90) {
-                showModal('⚠️', 'Invalid Number', 'Please enter a valid number between 1 and 90.');
+            const input =
+                document.getElementById('manual-number-input');
+
+            const value = Number(input.value.trim());
+
+            if (!Number.isInteger(value) ||
+                value < 1 || value > 90) {
+                showModal(
+                    '⚠️',
+                    'Invalid Number',
+                    'Please enter a number between 1 and 90.'
+                );
                 return;
             }
-            if (calledNumbers.includes(val)) {
-                showModal('⚠️', 'Already Called', `Number ${val} has already been called.`);
-                return;
-            }
 
-            calledNumbers.push(val);
-            currentNumber = val;
+            const result =
+                await callNumberWithServer('manual', value);
 
-            if (db) {
-                try {
-                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
-                    await updateDoc(roomRef, {
-                        calledNumbers: calledNumbers,
-                        currentNumber: currentNumber
-                    });
-                } catch (err) {
-                    console.error("Error calling manual number:", err);
-                }
-            }
-
-            speakNumber(currentNumber);
-            updateAllRoomUI();
+            if (result) input.value = '';
         }
+
 
         function toggleAutoPlay() {
             if (!isHost) return;
@@ -2817,26 +2858,16 @@ async function executeLeaveRoom() {
             }
         }
 
-        function callNumberFromBoard(num) {
+        
+        async function callNumberFromBoard(num) {
             if (!isHost) return;
-            if (calledNumbers.includes(num)) return;
-            calledNumbers.push(num);
-            currentNumber = num;
 
-            if (db) {
-                try {
-                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
-                    updateDoc(roomRef, {
-                        calledNumbers: calledNumbers,
-                        currentNumber: currentNumber
-                    });
-                } catch (e) {
-                    console.error("Error calling from board:", e);
-                }
-            }
-            speakNumber(currentNumber);
-            updateAllRoomUI();
+            if (!Number.isInteger(num) ||
+                num < 1 || num > 90) return;
+
+            await callNumberWithServer('manual', num);
         }
+
 
         function updatePlayerCalledStripUI() {
             const currEl = document.getElementById('player-current-number');
