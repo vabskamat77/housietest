@@ -1128,6 +1128,7 @@
                 } catch (err) {
                     console.error("Failed to create multiplayer Party:", err);
                     showModal('⚠️', 'Party Creation Failed', `The token was securely reserved, but the party could not be created (${err.message || 'Network/Storage blocked'}). Please contact support with token ${tokenInput}; do not retry payment.`);
+                 return;
                 } finally {
                     btn.disabled = false;
                     btn.innerHTML = '<span>🚀 Start Hosting</span>';
