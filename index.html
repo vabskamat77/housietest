@@ -1149,9 +1149,11 @@ const response = await fetch(
                     const user = await ensureAuth();
                     const hostUid = (user && user.uid) ? user.uid : getOrCreateFallbackUid('host');
 
-                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
-                    await setDoc(roomRef, {
+
+                    // The secure Vercel API has already created the room.
+                    // Do not overwrite the server-owned Firestore document.
                     subscribeToRoom(roomCode);
+
                 } catch (err) {
                     console.error("Failed to create multiplayer Party:", err);
                     showModal('⚠️', 'Party Creation Failed', `The token was securely reserved, but the party could not be created (${err.message || 'Network/Storage blocked'}). Please contact support with token ${tokenInput}; do not retry payment.`);
