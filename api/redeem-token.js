@@ -105,12 +105,12 @@ export default async function handler(req, res) {
         const room = roomSnap.data();
 
         if (
-          room.hostId === user.uid &&
-          tokenSnap.data().activeRoomCode === roomCode &&
-          existingCode === roomCode &&
-          room.roomClosed !== true &&
-          room.active !== false &&
-          room.status === 'active'
+            room.hostId === user.uid &&
+            tokenSnap.data().activeRoomCode === roomCode &&
+            existingCode === roomCode &&
+            room.roomClosed !== true &&
+            room.active !== false &&
+            room.status === 'active'
         ) {
           return {
             roomCode,
@@ -122,17 +122,19 @@ export default async function handler(req, res) {
         throw new Error('Party Code already exists.');
       }
 
-      if (singleUse && (usedCount > 0 || existingCode)) {
-        throw new Error(
-          'This single-use Host Token has already been used.'
-        );
-      }
+      
+if (singleUse && usedCount > 0) {
+  throw new Error(
+    'This single-use Host Token has already been used.'
+  );
+}
 
-      if (existingCode) {
-        throw new Error(
-          'This Host Token is already assigned to another Party.'
-        );
-      }
+if (existingCode) {
+  throw new Error(
+    'This Host Token is already assigned to another active Party.'
+  );
+}
+
 
       const maxTickets = Number(data.maxTickets) || 50;
 
@@ -163,13 +165,14 @@ export default async function handler(req, res) {
 
       tx.create(roomRef, roomData);
 
-      tx.update(tokenRef, {
-        usedCount: usedCount + 1,
-        ...(singleUse
-          ? { activeRoomCode: roomCode, inUse: true }
-          : {}),
-        lastRedeemedAt: new Date()
-      });
+      
+tx.update(tokenRef, {
+  usedCount: usedCount + 1,
+  activeRoomCode: roomCode,
+  inUse: true,
+  lastRedeemedAt: new Date()
+});
+
 
       return { roomCode, maxTickets, singleUse };
     });
