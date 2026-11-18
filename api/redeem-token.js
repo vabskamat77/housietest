@@ -106,7 +106,7 @@ export default async function handler(req, res) {
 
         if (
           room.hostId === user.uid &&
-          room.hostToken === token &&
+          tokenSnap.data().activeRoomCode === roomCode &&
           existingCode === roomCode &&
           room.roomClosed !== true &&
           room.active !== false &&
