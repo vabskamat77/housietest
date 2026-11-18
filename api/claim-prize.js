@@ -108,9 +108,24 @@ export default async function handler(req, res) {
         }
       }
 
+      // Reject malformed or duplicated called-number history.
+      const calledNumbers = room.calledNumbers;
+
+      if (
+        !Array.isArray(calledNumbers) ||
+        calledNumbers.length > 90 ||
+        calledNumbers.some(
+          n => !Number.isInteger(n) || n < 1 || n > 90
+        ) ||
+        new Set(calledNumbers).size !== calledNumbers.length
+      ) {
+        throw new Error('Invalid called-number history.');
+      }
+
+      
       if (!verifyPrizePattern(
         ticket.grid,
-        room.calledNumbers,
+        calledNumbers,
         prizeName
       )) {
         throw new Error(
@@ -144,7 +159,7 @@ export default async function handler(req, res) {
     const message = err.message || 'Claim failed.';
 
     const expected =
-      /not found|not active|ownership|registered|claimed|disabled|already won|does not satisfy/i
+      /not found|not active|ownership|registered|claimed|disabled|already won|does not satisfy|invalid called-number/i
         .test(message);
 
     return res.status(expected ? 400 : 500).json({
