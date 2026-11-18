@@ -1430,29 +1430,6 @@ const response = await fetch(
             if (statusMonitorInterval) { clearInterval(statusMonitorInterval); statusMonitorInterval = null; }
             if (autoPlayInterval) { clearInterval(autoPlayInterval); autoPlayInterval = null; }
 
-            if (isHost && db && roomCode) {
-                try {
-                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
-                    updateDoc(roomRef, {
-                        roomClosed: true,
-                        status: 'inactive',
-                        closedAt: Date.now(),
-                        hostToken: null
-                    }).catch(() => {});
-                } catch (e) {}
-
-                if (activeHostTokenIsSingleUse) {
-                    if (activeHostTokenDocRef) {
-                        updateDoc(activeHostTokenDocRef, {
-                            active: false,
-                            status: 'inactive',
-                            inUse: false,
-                            activeRoomCode: null
-                        }).catch(() => {});
-                    }
-                }
-            }
-
             clearSessionState();
             roomCode = null;
             isHost = false;
@@ -2154,40 +2131,73 @@ const response = await fetch(
             `;
             modal.classList.remove('hidden');
         }
+            
+async function executeLeaveRoom() {
+    const wasHost = isHost;
 
-        async function executeLeaveRoom() {
-            if (unsubscribeRoom) { unsubscribeRoom(); unsubscribeRoom = null; }
-            if (unsubscribePlayers) { unsubscribePlayers(); unsubscribePlayers = null; }
-            if (unsubscribeToken) { unsubscribeToken(); unsubscribeToken = null; }
-            if (statusMonitorInterval) { clearInterval(statusMonitorInterval); statusMonitorInterval = null; }
-
-            const wasHost = isHost;
-            if (isHost && db && roomCode) {
-                try {
-                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
-                    await updateDoc(roomRef, {
-                        roomClosed: true,
-                        status: 'inactive',
-                        closedAt: Date.now(),
-                        hostToken: null
-                    });
-                } catch (e) {
-                    console.error("Error closing Party on leave:", e);
-                }
-
-                if (activeHostTokenIsSingleUse) {
-                    if (activeHostTokenDocRef) {
-                        try {
-                            await updateDoc(activeHostTokenDocRef, {
-                                active: false,
-                                status: 'inactive',
-                                inUse: false,
-                                activeRoomCode: null
-                            });
-                        } catch (e) {}
-                    }
-                }
+    // A host must receive server confirmation before
+    // clearing their session or disconnecting listeners.
+    if (wasHost) {
+        try {
+            if (!roomCode || !auth?.currentUser) {
+                throw new Error('Host authentication is unavailable.');
             }
+
+            const idToken = await auth.currentUser.getIdToken();
+
+            const response = await fetch(
+                `${TAMBOLA_API_BASE_URL}/api/close-party`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${idToken}`
+                    },
+                    body: JSON.stringify({ roomCode })
+                }
+            );
+
+            const result = await response.json();
+
+            if (!response.ok || !result.ok) {
+                throw new Error(
+                    result.error || 'Could not close the Party.'
+                );
+            }
+        } catch (err) {
+            console.error('Secure Party closure failed:', err);
+
+            showModal(
+                '❌',
+                'Party Not Closed',
+                `${err.message || 'Server error.'} Your Party session has been preserved. Please try again.`
+            );
+
+            return;
+        }
+    }
+
+    if (unsubscribeRoom) {
+        unsubscribeRoom();
+        unsubscribeRoom = null;
+    }
+
+    if (unsubscribePlayers) {
+        unsubscribePlayers();
+        unsubscribePlayers = null;
+    }
+
+    if (unsubscribeToken) {
+        unsubscribeToken();
+        unsubscribeToken = null;
+    }
+
+    if (statusMonitorInterval) {
+        clearInterval(statusMonitorInterval);
+        statusMonitorInterval = null;
+    }
+
+    // Keep the existing player-leave code below.
 
             if (!isHost && db && roomCode && currentUser) {
                 try {
