@@ -83,7 +83,18 @@ export default async function handler(req, res) {
       }
 
       const room = roomSnap.data();
+// Prevent new ticket issuance after the game begins.
+const gameHasStarted =
+  Array.isArray(room.calledNumbers) &&
+  room.calledNumbers.length > 0;
 
+if (gameHasStarted) {
+  if (action === 'add' || !registrationSnap.exists) {
+    throw new Error(
+      'New tickets cannot be issued after the game has started.'
+    );
+  }
+}
       if (
         room.roomClosed === true ||
         room.active !== true ||
