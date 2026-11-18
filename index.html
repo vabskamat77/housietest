@@ -1040,28 +1040,32 @@
         }
 
         async function createMultiplayerGame(offlineMode) {
-            const tokenInput = document.getElementById('host-token-input').value.trim().toUpperCase();
-            if (!tokenInput) {
-                showModal('⚠️', 'Host Token Required', 'Please enter a valid Host Token to start hosting.');
-                return;
-            }
-            if (!db) {
-                showModal('⚠️', 'Connection Required', 'Firebase is unavailable. Please refresh and try again.');
-                return;
-            }
+            
+const user = await ensureAuth();
 
-            const newRoomCode = generateRoomCode();
-            const btn = document.getElementById('btn-create-room');
-            let validTokenData = null;
-            let isSingleUseToken = true;
-            try {
-                btn.disabled = true;
-                btn.innerHTML = '<span>⏳ Validating Host Token...</span>';
-                const response = await fetch(`${TAMBOLA_API_BASE}/api/redeem-token`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token: tokenInput, roomCode: newRoomCode })
-                });
+if (!auth?.currentUser || user.isFallback) {
+  throw new Error(
+    'Firebase authentication is unavailable. Refresh and try again.'
+  );
+}
+
+const idToken = await auth.currentUser.getIdToken();
+
+const response = await fetch(
+  `${TAMBOLA_API_BASE}/api/redeem-token`,
+  {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${idToken}`
+    },
+    body: JSON.stringify({
+      token: tokenInput,
+      roomCode: newRoomCode
+    })
+  }
+);
+
                 const result = await response.json();
                 if (!response.ok || !result.ok) {
                     throw new Error(result.error || 'This token is invalid, inactive, or has already been used.');
