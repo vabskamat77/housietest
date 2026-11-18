@@ -3000,49 +3000,98 @@ async function executeLeaveRoom() {
             }).join('');
         }
 
+        
+        let prizeClaimInProgress = false;
+
         async function claimPrizeForTicket(tIdx, prizeName) {
             const ticket = tickets[tIdx];
             if (!ticket) return;
 
+            if (prizeClaimInProgress) return;
+
             if (claimsStatus[prizeName]) {
-                showModal('ℹ️', 'Already Claimed', `${prizeName} has already been claimed by ${claimsStatus[prizeName].winnerName}!`);
+                showModal(
+                    'ℹ️',
+                    'Already Claimed',
+                    `${prizeName} has already been claimed.`
+                );
                 return;
             }
 
-            if (restrictOnePrizePerTicket && Object.values(claimsStatus).some(claim => claim && claim.ticketId === ticket.id)) {
-                showModal('⚠️', 'Ticket Restricted', `This ticket has already won a prize and cannot claim another one under the room rules.`);
+            if (!roomCode || !ticket.id) {
+                showModal(
+                    '❌',
+                    'Claim Failed',
+                    'Party or ticket information is missing.'
+                );
                 return;
             }
 
-            const isValid = verifyPatternOnTicket(ticket, prizeName);
-            if (!isValid) {
-                showModal('❌', 'Claim Rejected', `Your ticket "${ticket.name}" does not yet satisfy the required pattern for ${prizeName}.`);
-                return;
-            }
+            prizeClaimInProgress = true;
 
-            claimsStatus[prizeName] = {
-                winnerName: playerName,
-                ticketName: ticket.name,
-                ticketId: ticket.id,
-                claimedAt: Date.now()
-            };
+            try {
+                const user = await ensureAuth();
 
-            if (db) {
-                try {
-                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
-                    await updateDoc(roomRef, {
-                        claims: claimsStatus
-                    });
-                } catch (err) {
-                    console.error("Error submitting claim:", err);
+                if (!auth?.currentUser || user?.isFallback) {
+                    throw new Error(
+                        'Firebase login is required to claim prizes.'
+                    );
                 }
-            }
 
-            updateClaimsUI();
-            updateHostPrizeAndEligibilityMonitor();
-            updateAllRoomUI();
-            showModal('🏆', 'Prize Claimed Successfully!', `Congratulations! Your claim for ${prizeName} with ticket "${ticket.name}" has been verified!`);
+                const idToken =
+                    await auth.currentUser.getIdToken();
+
+                const response = await fetch(
+                    `${TAMBOLA_API_BASE}/api/claim-prize`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${idToken}`
+                        },
+                        body: JSON.stringify({
+                            roomCode,
+                            ticketId: ticket.id,
+                            prizeName
+                        })
+                    }
+                );
+
+                const data = await response.json();
+
+                if (!response.ok || !data.ok) {
+                    throw new Error(
+                        data.error || 'Prize verification failed.'
+                    );
+                }
+
+                // Update local display only after server approval.
+                claimsStatus[prizeName] = data.claim;
+
+                updateClaimsUI();
+                updateHostPrizeAndEligibilityMonitor();
+                updateAllRoomUI();
+
+                showModal(
+                    '🏆',
+                    'Prize Claimed Successfully!',
+                    `Congratulations! Your ${prizeName} claim ` +
+                    `has been verified by the server.`
+                );
+
+            } catch (err) {
+                console.error('Secure prize claim error:', err);
+
+                showModal(
+                    '❌',
+                    'Claim Rejected',
+                    err.message || 'Unable to verify prize claim.'
+                );
+            } finally {
+                prizeClaimInProgress = false;
+            }
         }
+
 
         function updateTicketName(idx, newName) {
             if (tickets[idx]) {
@@ -3162,58 +3211,37 @@ async function executeLeaveRoom() {
             return false;
         }
 
+       
         async function claimPrize(prizeName) {
-            if (claimsStatus[prizeName]) {
-                showModal('ℹ️', 'Already Claimed', `${prizeName} has already been claimed by ${claimsStatus[prizeName].winnerName}!`);
+            const selector =
+                document.getElementById('claim-ticket-selector');
+
+            if (!selector || selector.value === '') {
+                showModal(
+                    '⚠️',
+                    'Select Ticket',
+                    'Please select a ticket to claim the prize.'
+                );
                 return;
             }
 
-            const sel = document.getElementById('claim-ticket-selector');
-            if (!sel || sel.value === "") {
-                showModal('⚠️', 'Select Ticket', 'Please select one of your playing tickets to claim the prize.');
+            const ticketIndex = Number(selector.value);
+
+            if (
+                !Number.isInteger(ticketIndex) ||
+                !tickets[ticketIndex]
+            ) {
+                showModal(
+                    '⚠️',
+                    'Invalid Ticket',
+                    'Selected ticket not found.'
+                );
                 return;
             }
 
-            const tIdx = parseInt(sel.value, 10);
-            const ticket = tickets[tIdx];
-            if (!ticket) {
-                showModal('⚠️', 'Invalid Ticket', 'Selected ticket not found.');
-                return;
-            }
-
-            if (restrictOnePrizePerTicket && Object.values(claimsStatus).some(claim => claim && claim.ticketId === ticket.id)) {
-                showModal('⚠️', 'Ticket Restricted', `This ticket has already won a prize and cannot claim another one under the room rules.`);
-                return;
-            }
-
-            const isValid = verifyPatternOnTicket(ticket, prizeName);
-            if (!isValid) {
-                showModal('❌', 'Claim Rejected', `Your ticket "${ticket.name}" does not yet satisfy the required pattern for ${prizeName}.`);
-                return;
-            }
-
-            claimsStatus[prizeName] = {
-                winnerName: playerName,
-                ticketName: ticket.name,
-                ticketId: ticket.id,
-                claimedAt: Date.now()
-            };
-
-            if (db) {
-                try {
-                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
-                    await updateDoc(roomRef, {
-                        claims: claimsStatus
-                    });
-                } catch (err) {
-                    console.error("Error submitting claim:", err);
-                }
-            }
-
-            updateClaimsUI();
-            updateHostPrizeAndEligibilityMonitor();
-            showModal('🏆', 'Prize Claimed Successfully!', `Congratulations! Your claim for ${prizeName} with ticket "${ticket.name}" has been verified!`);
+            await claimPrizeForTicket(ticketIndex, prizeName);
         }
+
 
         function updateClaimsUI() {
             const prizeOrder = ["Early 5", "Early 10", "Top Line", "Middle Line", "Bottom Line", "Full House"].filter(p => prizesEnabled[p] !== false);
