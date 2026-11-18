@@ -154,6 +154,8 @@ if (existingCode) {
         active: true,
         roomClosed: false,
         maxRoomTickets: maxTickets,
+ // Authoritative counter for server-issued tickets.
+        serverIssuedTicketCount: 0,
         calledNumbers: [],
         currentNumber: null,
         restrictOnePrizePerTicket: false,
