@@ -1087,36 +1087,50 @@ async function registerTicketWithServer(roomCode, playerName, action = 'join') {
         }
 
         async function createMultiplayerGame(offlineMode) {
-     try {       
-          const user = await ensureAuth();
+            const btn = document.getElementById('btn-create-room');
+            const tokenInput = document.getElementById('host-token-input')?.value.trim().toUpperCase() || '';
 
-if (!auth?.currentUser || user.isFallback) {
-  throw new Error(
-    'Firebase authentication is unavailable. Refresh and try again.'
-  );
-}
+            if (!tokenInput) {
+                showModal('⚠️', 'Host Token Required', 'Please enter a valid Host Token.');
+                return;
+            }
+            if (!db || !auth) {
+                showModal('❌', 'Firebase Unavailable', 'Firebase is unavailable. Please refresh and try again.');
+                return;
+            }
+            if (!btn || btn.disabled) return;
 
-const idToken = await auth.currentUser.getIdToken();
+            // The backend must also reject room-code collisions atomically.
+            const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            const randomBytes = new Uint8Array(6);
+            crypto.getRandomValues(randomBytes);
+            const newRoomCode = Array.from(randomBytes, b => alphabet[b % alphabet.length]).join('');
+            let validTokenData = null;
+            let isSingleUseToken = false;
 
-const response = await fetch(
-  `${TAMBOLA_API_BASE}/api/redeem-token`,
-  {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${idToken}`
-    },
-    body: JSON.stringify({
-      token: tokenInput,
-      roomCode: newRoomCode
-    })
-  }
-);
+            btn.disabled = true;
+            btn.innerHTML = '<span>⏳ Activating Token...</span>';
 
+            try {
+                const user = await ensureAuth();
+                if (!auth.currentUser || user?.isFallback) {
+                    throw new Error('Firebase authentication is unavailable. Refresh and try again.');
+                }
+
+                const idToken = await auth.currentUser.getIdToken();
+                const response = await fetch(`${TAMBOLA_API_BASE}/api/redeem-token`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${idToken}`
+                    },
+                    body: JSON.stringify({ token: tokenInput, roomCode: newRoomCode })
+                });
                 const result = await response.json();
                 if (!response.ok || !result.ok) {
                     throw new Error(result.error || 'This token is invalid, inactive, or has already been used.');
                 }
+
                 maxRoomTickets = Number(result.maxTickets) || 50;
                 isSingleUseToken = Boolean(result.singleUse);
                 validTokenData = {
@@ -1124,48 +1138,29 @@ const response = await fetch(
                     maxTickets: maxRoomTickets,
                     singleUse: isSingleUseToken
                 };
-     } catch (err) {
-                showModal('❌', 'Host Token Could Not Be Activated', err.message || 'The secure token service could not validate this token.');
+
+                // The secure API has already created the room; never overwrite it here.
+                isHost = true;
+                playerName = 'Host';
+                roomCode = newRoomCode;
+                activeHostTokenCode = tokenInput;
+                activeHostTokenDocRef = validTokenData.ref;
+                activeHostTokenIsSingleUse = isSingleUseToken;
+                roomRoster = [];
+                tickets = [];
+                saveSessionState();
+                subscribeToRoom(roomCode);
+                enterGameRoomUI();
+                showModal('🎉', 'Party Successfully Created!',
+                    `Your new party has been successfully created!\nParty Code: ${roomCode}`);
+            } catch (err) {
+                console.error('Failed to create multiplayer Party:', err);
+                showModal('❌', 'Party Creation Failed',
+                    `${err.message || 'Unable to create party.'} If the token was reserved, do not retry payment; contact support.`);
+            } finally {
                 btn.disabled = false;
                 btn.innerHTML = '<span>🚀 Start Hosting</span>';
-                return;
             }
-
-            isHost = true;
-            playerName = "Host";
-            roomCode = newRoomCode;
-            activeHostTokenCode = tokenInput;
-            activeHostTokenDocRef = validTokenData ? validTokenData.ref : null;
-            activeHostTokenIsSingleUse = isSingleUseToken;
-            roomRoster = [];
-            tickets = [];
-
-            saveSessionState();
-
-            if (db) {
-                try {
-                    btn.innerHTML = '<span>⏳ Creating Live Party...</span>';
-
-                    const user = await ensureAuth();
-                    const hostUid = (user && user.uid) ? user.uid : getOrCreateFallbackUid('host');
-
-
-                    // The secure Vercel API has already created the room.
-                    // Do not overwrite the server-owned Firestore document.
-                    subscribeToRoom(roomCode);
-
-                } catch (err) {
-                    console.error("Failed to create multiplayer Party:", err);
-                    showModal('⚠️', 'Party Creation Failed', `The token was securely reserved, but the party could not be created (${err.message || 'Network/Storage blocked'}). Please contact support with token ${tokenInput}; do not retry payment.`);
-                 return;
-                } finally {
-                    btn.disabled = false;
-                    btn.innerHTML = '<span>🚀 Start Hosting</span>';
-                }
-            }
-
-            enterGameRoomUI();
-            showModal('🎉', 'Party Successfully Created!', `Your new party has been successfully created!\nParty Code: ${roomCode}`);
         }
 
         async function joinExistingGame() {
