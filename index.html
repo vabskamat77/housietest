@@ -2149,21 +2149,41 @@ async function addNewPlayerTicket() {
             }).join('');
         }
 
-        async function togglePrizeEnabled(prizeName) {
-            if (!isHost) return;
-            prizesEnabled[prizeName] = !prizesEnabled[prizeName];
-
-            if (db && roomCode) {
-                try {
-                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
-                    await updateDoc(roomRef, {
-                        prizesEnabled: prizesEnabled
-                    });
-                } catch (e) {
-                    console.error("Error updating prize status:", e);
-                }
+        async function updateRoomSettingWithServer(setting, value, prizeName = null) {
+            const user = await ensureAuth();
+            if (!isHost || !roomCode || !auth?.currentUser || user?.isFallback) {
+                throw new Error('Authenticated host session required.');
             }
-            updateAllRoomUI();
+            const idToken = await auth.currentUser.getIdToken();
+            const response = await fetch(`${TAMBOLA_API_BASE}/api/update-room-settings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+                body: JSON.stringify({ roomCode, setting, value, ...(prizeName ? { prizeName } : {}) })
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.error || 'Room setting update failed.');
+            return data;
+        }
+
+        const pendingRoomSettings = new Set();
+        async function changeRoomSetting(setting, value, prizeName = null) {
+            const key = prizeName ? `${setting}:${prizeName}` : setting;
+            if (!isHost || pendingRoomSettings.has(key)) return;
+            pendingRoomSettings.add(key);
+            try {
+                await updateRoomSettingWithServer(setting, value, prizeName);
+                // The Firestore room listener applies the confirmed value.
+            } catch (err) {
+                console.error('Room setting update failed:', err);
+                showModal('❌', 'Setting Not Updated', err.message);
+            } finally {
+                pendingRoomSettings.delete(key);
+            }
+        }
+
+        async function togglePrizeEnabled(prizeName) {
+            if (!Object.prototype.hasOwnProperty.call(prizesEnabled, prizeName)) return;
+            await changeRoomSetting('prizesEnabled', prizesEnabled[prizeName] === false, prizeName);
         }
 
         function updateHostPrizeAndEligibilityMonitor() {
@@ -3391,40 +3411,16 @@ async function executeLeaveRoom() {
             }
         }
 
-        function toggleHostRuleOnePrizePerTicket() {
-            if (!isHost) return;
-            restrictOnePrizePerTicket = !restrictOnePrizePerTicket;
-            updateHostRuleUI();
-
-            if (db && roomCode) {
-                updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode), {
-                    restrictOnePrizePerTicket: restrictOnePrizePerTicket
-                }).catch(e => console.error("Error updating host rule:", e));
-            }
+        async function toggleHostRuleOnePrizePerTicket() {
+            await changeRoomSetting('restrictOnePrizePerTicket', !restrictOnePrizePerTicket);
         }
 
-        function toggleHostRuleMultiTickets() {
-            if (!isHost) return;
-            allowMultiTickets = !allowMultiTickets;
-            updateHostRuleUI();
-
-            if (db && roomCode) {
-                updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode), {
-                    allowMultiTickets: allowMultiTickets
-                }).catch(e => console.error("Error updating multi-tickets rule:", e));
-            }
+        async function toggleHostRuleMultiTickets() {
+            await changeRoomSetting('allowMultiTickets', !allowMultiTickets);
         }
 
-        function toggleHostRuleLockRoom() {
-            if (!isHost) return;
-            lockRoomNewPlayers = !lockRoomNewPlayers;
-            updateHostRuleUI();
-
-            if (db && roomCode) {
-                updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode), {
-                    lockRoomNewPlayers: lockRoomNewPlayers
-                }).catch(e => console.error("Error updating room lock rule:", e));
-            }
+        async function toggleHostRuleLockRoom() {
+            await changeRoomSetting('lockRoomNewPlayers', !lockRoomNewPlayers);
         }
 
         function updateHostRuleUI() {
