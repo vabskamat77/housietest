@@ -156,6 +156,10 @@ if (existingCode) {
         maxRoomTickets: maxTickets,
  // Authoritative counter for server-issued tickets.
         serverIssuedTicketCount: 0,
+// Tickets must be issued through the secure API.
+        ticketMode: 'server',
+// Host can enable additional tickets later.
+        allowMultiTickets: false,
         calledNumbers: [],
         currentNumber: null,
         restrictOnePrizePerTicket: false,
