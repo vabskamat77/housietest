@@ -1213,7 +1213,11 @@ const response = await fetch(
                 const isMatchingHostToken = roomData.hostToken && roomData.hostToken.trim().toUpperCase() === playerNameInput.toUpperCase();
                 const isExistingHost = (user && roomData.hostId === user.uid) || Boolean(isMatchingHostToken);
 
-                if (roomData.lockRoomNewPlayers && !isExistingHost) {
+                if (
+    roomData.lockRoomNewPlayers &&
+    !isExistingHost &&
+    roomData.ticketMode !== 'server'
+) {
                     showModal('🔒', 'Party Locked', 'The host has locked this Party and is not allowing new players to join.');
                     btn.disabled = false;
                     btn.innerHTML = '<span>🎯 Join Live party</span>';
@@ -1251,32 +1255,69 @@ const response = await fetch(
                     return;
                 }
 
-                const playersCol = collection(db, 'artifacts', appId, 'public', 'data', `tambola_players_${codeInput}`);
-                const playersSnap = await getDocs(playersCol);
-                let currentTotalTickets = 0;
-                playersSnap.forEach(d => {
-                    const p = d.data();
-                    if (p && p.left !== true && p.uid !== (user ? user.uid : '')) {
-                        currentTotalTickets += (p.ticketCount || 0);
-                    }
-                });
+                
+                let registeredTickets = [];
 
-                if (currentTotalTickets + ticketCountInput > maxRoomTickets) {
-                    showModal('⚠️', 'Ticket Capacity Reached', `This Party has a maximum capacity of ${maxRoomTickets} tickets. Joining would exceed the limit (${currentTotalTickets} already taken).`);
-                    btn.disabled = false;
-                    btn.innerHTML = '<span>🎯 Join Live party</span>';
-                    return;
+                if (roomData.ticketMode === 'server') {
+                    // The backend handles authentication, capacity,
+                    // ownership, existing tickets, and room restrictions.
+                    const registration = await registerTicketWithServer(
+                        codeInput,
+                        playerNameInput,
+                        'join'
+                    );
+
+                    registeredTickets = registration.tickets;
+
+                } else {
+                    // Preserve legacy behavior for older parties only.
+                    const playersCol = collection(
+                        db,
+                        'artifacts',
+                        appId,
+                        'public',
+                        'data',
+                        `tambola_players_${codeInput}`
+                    );
+
+                    const playersSnap = await getDocs(playersCol);
+
+                    let currentTotalTickets = 0;
+
+                    playersSnap.forEach(d => {
+                        const p = d.data();
+
+                        if (
+                            p &&
+                            p.left !== true &&
+                            p.uid !== user.uid
+                        ) {
+                            currentTotalTickets += p.ticketCount || 0;
+                        }
+                    });
+
+                    if (
+                        currentTotalTickets + ticketCountInput >
+                        maxRoomTickets
+                    ) {
+                        throw new Error(
+                            'Party ticket capacity reached.'
+                        );
+                    }
+
+                    for (let i = 0; i < ticketCountInput; i++) {
+                        registeredTickets.push(
+                            createTicketObject(`Ticket ${i + 1}`)
+                        );
+                    }
                 }
 
                 roomCode = codeInput;
                 playerName = playerNameInput;
-                activeHostTokenCode = roomData.hostToken || null;
+                activeHostTokenCode = null;
                 isHost = false;
 
-                tickets = [];
-                for (let i = 0; i < ticketCountInput; i++) {
-                    tickets.push(createTicketObject(`Ticket ${i + 1}`));
-                }
+                tickets = registeredTickets;
 
                 if (isAutoMarkEnabled) {
                     applyAutoMarkToAllTickets();
@@ -1284,15 +1325,32 @@ const response = await fetch(
 
                 saveSessionState();
 
-                const playerUid = (user && user.uid) ? user.uid : getOrCreateFallbackUid('player');
-                const playerRef = doc(db, 'artifacts', appId, 'public', 'data', `tambola_players_${roomCode}`, playerUid);
+                const playerUid = user.uid;
+
+                const playerRef = doc(
+                    db,
+                    'artifacts',
+                    appId,
+                    'public',
+                    'data',
+                    `tambola_players_${roomCode}`,
+                    playerUid
+                );
+
                 await setDoc(playerRef, {
                     uid: playerUid,
                     name: playerName,
                     left: false,
                     ticketCount: tickets.length,
                     ticketNames: tickets.map(t => t.name),
-                    serializedTickets: JSON.stringify(tickets.map(t => ({ id: t.id, name: t.name, grid: t.grid, daubed: t.daubed }))),
+                    serializedTickets: JSON.stringify(
+                        tickets.map(t => ({
+                            id: t.id,
+                            name: t.name,
+                            grid: t.grid,
+                            daubed: t.daubed
+                        }))
+                    ),
                     joinedAt: Date.now()
                 });
 
@@ -1312,8 +1370,13 @@ const response = await fetch(
                 subscribeToRoom(roomCode);
                 enterGameRoomUI();
             } catch (err) {
-                console.error("Join Party error:", err);
-                showModal('❌', 'Join Failed', 'Unable to join Party right now. Please try again.');
+    console.error("Join Party error:", err);
+
+    showModal(
+        '❌',
+        'Join Failed',
+        err.message || 'Unable to join Party right now.'
+    );
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = '<span>🎯 Join Live party</span>';
