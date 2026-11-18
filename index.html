@@ -1469,50 +1469,42 @@ const response = await fetch(
             if (typeof roomData.status === 'string' && roomData.status.toLowerCase() !== 'active') return true;
             return false;
         }
+            
+async function verifyActivePartyAndTokenHealth() {
+    if (!db || !roomCode) return;
 
-        async function verifyActivePartyAndTokenHealth() {
-            if (!db || !roomCode) return;
-            try {
-                const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
-                const roomSnap = await getDoc(roomRef);
+    try {
+        const roomRef = doc(
+            db,
+            'artifacts',
+            appId,
+            'public',
+            'data',
+            'tambola_rooms',
+            roomCode
+        );
 
-                if (!roomSnap.exists()) {
-                    forceCloseInactiveParty('Party Closed', 'This party no longer exists or has been closed.');
-                    return;
-                }
+        const roomSnap = await getDoc(roomRef);
 
-                const roomData = roomSnap.data();
-                if (isPartyDocInactive(roomData)) {
-                    forceCloseInactiveParty('Party Closed', 'The party status is now inactive. The party has been closed.');
-                    return;
-                }
-
-                const tokenToCheck = (roomData.hostToken || activeHostTokenCode || '').trim().toUpperCase();
-                if (tokenToCheck) {
-                    activeHostTokenCode = tokenToCheck;
-                    const candidatePaths = [
-                        ['artifacts', appId, 'public', 'data', 'tambola_tokens', tokenToCheck],
-                        ['artifacts', appId, 'public', 'data', 'tambola_hosting_tokens', tokenToCheck],
-                        ['artifacts', appId, 'public', 'data', 'hosting_tokens', tokenToCheck]
-                    ];
-
-                    for (const pathSegments of candidatePaths) {
-                        try {
-                            const tSnap = await getDoc(doc(db, ...pathSegments));
-                            if (tSnap.exists()) {
-                                if (isTokenDocInactive(tSnap.data())) {
-                                    forceCloseInactiveParty('Party Closed', `The Host Token (${tokenToCheck}) is now inactive. This party has been closed.`);
-                                    return;
-                                }
-                                break;
-                            }
-                        } catch (e) {}
-                    }
-                }
-            } catch (err) {
-                console.warn("Periodic party/token health check warning:", err);
-            }
+        if (!roomSnap.exists()) {
+            forceCloseInactiveParty(
+                'Party Closed',
+                'This party no longer exists.'
+            );
+            return;
         }
+
+        if (isPartyDocInactive(roomSnap.data())) {
+            forceCloseInactiveParty(
+                'Party Closed',
+                'This party has been permanently closed.'
+            );
+        }
+
+    } catch (err) {
+        console.warn('Party status check failed:', err);
+    }
+}
 
         function subscribeToRoom(code) {
             if (!db || !code) return;
@@ -1532,11 +1524,6 @@ const response = await fetch(
                 if (isPartyDocInactive(data)) {
                     forceCloseInactiveParty('Party Closed', 'The party status has become inactive or was ended by the host.');
                     return;
-                }
-
-                if (data.hostToken && data.hostToken !== activeHostTokenCode) {
-                    activeHostTokenCode = data.hostToken;
-                    attachHostTokenListener(activeHostTokenCode);
                 }
 
                 const prevCurrent = currentNumber;
@@ -1584,10 +1571,6 @@ const response = await fetch(
                 renderConnectedPlayers(roomRoster);
                 updateHostPrizeAndEligibilityMonitor();
             }, (err) => console.error("Players listener error:", err));
-
-            if (activeHostTokenCode) {
-                attachHostTokenListener(activeHostTokenCode);
-            }
 
             statusMonitorInterval = setInterval(() => {
                 verifyActivePartyAndTokenHealth();
