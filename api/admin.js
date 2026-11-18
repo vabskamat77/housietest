@@ -38,7 +38,13 @@ export default async function handler(req,res) {
   let identity;
   
 try {
-  identity = await getAuth().verifyIdToken(match[1], true);
+  
+const db = getDb();
+
+identity = await db.app
+  .auth()
+  .verifyIdToken(match[1], true);
+
 } catch (err) {
   console.error('Admin Firebase token verification failed:', {
     code: err.code || 'unknown',
