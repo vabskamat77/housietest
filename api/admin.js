@@ -36,22 +36,8 @@ export default async function handler(req,res) {
   const match=/^Bearer (.+)$/.exec(req.headers.authorization||'');
   if (!match) return send(res,401,{error:'Sign in required'});
   let identity;
-  try {
-  // Ensure Firebase Admin is initialized before verifying login.
-  getDb();
-
-  identity = await getAuth().verifyIdToken(match[1], true);
-} catch (err) {
-  console.error(
-    'Firebase admin verification error:',
-    err.code || err.name,
-    err.message
-  );
-
-  return send(res, 401, {
-    error: 'Invalid or expired login'
-  });
-}
+  try { identity=await getAuth().verifyIdToken(match[1],true); }
+  catch { return send(res,401,{error:'Invalid or expired login'}); }
   if (!allowedUids.includes(identity.uid) || identity.firebase?.sign_in_provider==='anonymous') return send(res,403,{error:'Administrator access denied'});
   const db=getDb();
   try {
@@ -61,7 +47,7 @@ export default async function handler(req,res) {
         rooms(db).limit(300).get(),
         db.collection('stripe_payment_sessions').orderBy('createdAt','desc').limit(100).get()
       ]);
-      return send(res,200,{tokens:t.docs.map(serialize),rooms:r.docs.map(serialize).filter(x=>!x.roomClosed),sessions:s.docs.map(serialize)});
+      return send(res,200,{tokens:t.docs.map(serialize).filter(x=>x.hiddenFromAdmin!==true),rooms:r.docs.map(serialize).filter(x=>!x.roomClosed),sessions:s.docs.map(serialize)});
     }
     const body=req.body||{};
     const action=body.action;
@@ -75,6 +61,21 @@ export default async function handler(req,res) {
       await tokens(db).doc(token).create({token,tier:'ADMIN',maxTickets,singleUse,usedCount:0,active:true,status:'active',inUse:false,activeRoomCode:null,source:'admin',createdBy:identity.uid,createdAt:stamp()});
       await audit(db,identity.uid,action,token,{maxTickets,singleUse});
       return send(res,201,{ok:true,token});
+    }
+    if (action==='remove-token') {
+      const token=String(body.token||'').trim().toUpperCase();
+      if (!tokenPattern.test(token)) return send(res,400,{error:'Invalid token'});
+      const ref=tokens(db).doc(token);
+      await db.runTransaction(async tx=>{
+        const snap=await tx.get(ref);
+        if (!snap.exists) throw Object.assign(new Error('Token not found'),{status:404});
+        const t=snap.data();
+        if (t.activeRoomCode || t.inUse) throw Object.assign(new Error('Close the active party before removing this token'),{status:409});
+        // Archive rather than delete: preserve Stripe/payment evidence and audit history.
+        tx.update(ref,{hiddenFromAdmin:true,active:false,status:'revoked',inUse:false,removedAt:stamp(),removedBy:identity.uid});
+      });
+      await audit(db,identity.uid,action,token);
+      return send(res,200,{ok:true});
     }
     if (action==='revoke-token' || action==='activate-token') {
       const token=String(body.token||'').toUpperCase();
@@ -103,17 +104,18 @@ export default async function handler(req,res) {
       let closed=0;
       for (const code of selected) {
         const ref=rooms(db).doc(code);
+        const linked=await tokens(db).where('activeRoomCode','==',code).limit(2).get();
+        if (linked.size!==1) throw Object.assign(new Error('Party token association could not be verified for '+code),{status:409});
+        const linkedTokenRef=linked.docs[0].ref;
         await db.runTransaction(async tx=>{
           const snap=await tx.get(ref);
           if (!snap.exists || snap.data().roomClosed) return;
           const room=snap.data();
-          const token=room.hostToken||room.hostTokenUsed;
-          const tref=token && tokenPattern.test(token) ? tokens(db).doc(token) : null;
+          const tref=linkedTokenRef;
           const tsnap=tref ? await tx.get(tref) : null;
           tx.update(ref,{roomClosed:true,active:false,status:'inactive',closedAt:Date.now(),closedBy:'admin',endedByAdmin:true});
           if (tsnap?.exists && tsnap.data().activeRoomCode===code) {
-            const t=tsnap.data();
-            tx.update(tref,t.singleUse?{active:false,status:'inactive',inUse:false,activeRoomCode:null}:{inUse:false,activeRoomCode:null});
+            tx.update(tref,{inUse:false,activeRoomCode:null});
           }
           closed++;
         });
