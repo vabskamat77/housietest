@@ -10,6 +10,7 @@ import {
 
 export default async function handler(req, res) {
   setCors(req, res);
+
   if (!requireMethod(req, res, 'POST')) return;
 
   try {
@@ -27,6 +28,7 @@ export default async function handler(req, res) {
     }
 
     const db = getDb();
+
     const roomRef = db.collection('artifacts')
       .doc(appId())
       .collection('public')
@@ -34,7 +36,7 @@ export default async function handler(req, res) {
       .collection('tambola_rooms')
       .doc(roomCode);
 
-    // Find the server-side token association.
+    // Locate the token associated with this party.
     const tokenMatches = await tokenCollection(db)
       .where('activeRoomCode', '==', roomCode)
       .limit(2)
@@ -43,7 +45,8 @@ export default async function handler(req, res) {
     if (tokenMatches.size !== 1) {
       return res.status(409).json({
         ok: false,
-        error: 'Party token association could not be verified.'
+        error:
+          'Party token association could not be verified.'
       });
     }
 
@@ -59,11 +62,17 @@ export default async function handler(req, res) {
 
       const room = roomSnap.data();
 
+      // Only the authenticated host may close the party.
       if (room.hostId !== user.uid) {
-        throw new Error('Not authorized to close this Party.');
+        throw new Error(
+          'Not authorized to close this Party.'
+        );
       }
 
-      if (room.roomClosed === true || room.active === false) {
+      if (
+        room.roomClosed === true ||
+        room.active === false
+      ) {
         return { alreadyClosed: true };
       }
 
@@ -71,12 +80,12 @@ export default async function handler(req, res) {
         !tokenSnap.exists ||
         tokenSnap.data().activeRoomCode !== roomCode
       ) {
-        throw new Error('Party token association changed.');
+        throw new Error(
+          'Party token association changed.'
+        );
       }
 
-      const token = tokenSnap.data();
-      const singleUse = token.singleUse !== false;
-
+      // Close the room.
       tx.update(roomRef, {
         roomClosed: true,
         active: false,
@@ -85,18 +94,12 @@ export default async function handler(req, res) {
         closedBy: user.uid
       });
 
-      tx.update(tokenRef, singleUse
-        ? {
-            active: false,
-            status: 'inactive',
-            inUse: false,
-            activeRoomCode: null
-          }
-        : {
-            inUse: false,
-            activeRoomCode: null
-          }
-      );
+      // Release token for another party.
+      // Preserve firstUsedAt and expiresAt.
+      tx.update(tokenRef, {
+        inUse: false,
+        activeRoomCode: null
+      });
 
       return { alreadyClosed: false };
     });
@@ -110,7 +113,8 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error('Close Party error:', err);
 
-    const message = err.message || 'Could not close Party.';
+    const message = err.message ||
+      'Could not close Party.';
 
     const status =
       /not authorized/i.test(message) ? 403 :
