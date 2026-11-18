@@ -1896,64 +1896,158 @@ async function verifyActivePartyAndTokenHealth() {
             }
         }
 
-        async function addNewPlayerTicket() {
-            if (!allowMultiTickets) {
-                showModal('⚠️', 'Not Allowed', 'Multiple tickets per player are disabled by the host.');
-                return;
-            }
-            if (tickets.length >= 4) {
-                showModal('⚠️', 'Max Limit Reached', 'You can have a maximum of 4 tickets.');
-                return;
-            }
+        
+async function addNewPlayerTicket() {
+    if (!allowMultiTickets) {
+        showModal(
+            '⚠️',
+            'Not Allowed',
+            'Multiple tickets per player are disabled by the host.'
+        );
+        return;
+    }
 
-            if (db && roomCode) {
-                try {
-                    const playersCol = collection(db, 'artifacts', appId, 'public', 'data', `tambola_players_${roomCode}`);
-                    const playersSnap = await getDocs(playersCol);
-                    let currentTotalTickets = 0;
-                    playersSnap.forEach(d => {
-                        const p = d.data();
-                        if (p && p.left !== true && p.uid !== (currentUser ? currentUser.uid : '')) {
-                            currentTotalTickets += (p.ticketCount || 0);
-                        }
-                    });
-                    currentTotalTickets += tickets.length;
-                    if (currentTotalTickets + 1 > maxRoomTickets) {
-                        showModal('⚠️', 'Capacity Reached', 'Adding another ticket would exceed the Party ticket capacity limit.');
-                        return;
-                    }
-                } catch (e) {}
-            }
+    if (tickets.length >= 4) {
+        showModal(
+            '⚠️',
+            'Max Limit Reached',
+            'You can have a maximum of 4 tickets.'
+        );
+        return;
+    }
 
-            const newTkt = createTicketObject(`Ticket ${tickets.length + 1}`);
-            if (isAutoMarkEnabled) {
-                const calledSet = new Set(calledNumbers);
-                for (let r = 0; r < 3; r++) {
-                    for (let c = 0; c < 9; c++) {
-                        const val = newTkt.grid[r][c];
-                        if (val > 0 && calledSet.has(val)) {
-                            newTkt.daubed[r][c] = true;
-                        }
-                    }
-                }
-            }
-            tickets.push(newTkt);
-            saveSessionState();
+    if (!db || !roomCode || !currentUser) {
+        showModal(
+            '⚠️',
+            'Not Connected',
+            'Please reconnect to your Party.'
+        );
+        return;
+    }
 
-            if (db && currentUser && roomCode) {
-                try {
-                    const playerRef = doc(db, 'artifacts', appId, 'public', 'data', `tambola_players_${roomCode}`, currentUser.uid);
-                    await setDoc(playerRef, {
-                        ticketCount: tickets.length,
-                        ticketNames: tickets.map(t => t.name),
-                        serializedTickets: JSON.stringify(tickets.map(t => ({ id: t.id, name: t.name, grid: t.grid, daubed: t.daubed })))
-                    }, { merge: true });
-                } catch (e) {}
-            }
+    const addBtn = document.getElementById('add-ticket-btn');
 
-            updateAllRoomUI();
-            showModal('🎟️', 'Ticket Added', `Successfully added "${newTkt.name}"!`);
+    if (addBtn?.disabled) return;
+
+    if (addBtn) addBtn.disabled = true;
+
+    try {
+        const roomRef = doc(
+            db,
+            'artifacts',
+            appId,
+            'public',
+            'data',
+            'tambola_rooms',
+            roomCode
+        );
+
+        const roomSnap = await getDoc(roomRef);
+
+        if (!roomSnap.exists()) {
+            throw new Error('Party not found.');
         }
+
+        const roomData = roomSnap.data();
+
+        if (roomData.ticketMode !== 'server') {
+            throw new Error(
+                'Additional tickets require a secure Party. ' +
+                'Please create a new Party.'
+            );
+        }
+
+        // The server is authoritative for capacity,
+        // ticket limits, room locks and game-start cutoff.
+        const registration = await registerTicketWithServer(
+            roomCode,
+            playerName,
+            'add'
+        );
+
+        const serverTickets = registration.tickets;
+
+        // Preserve the player's existing local marks
+        // and custom names for tickets already issued.
+        const previousTickets = new Map(
+            tickets.map(ticket => [ticket.id, ticket])
+        );
+
+        tickets = serverTickets.map(serverTicket => {
+            const previous = previousTickets.get(serverTicket.id);
+
+            return {
+                ...serverTicket,
+                name: previous?.name || serverTicket.name,
+                daubed: previous?.daubed ||
+                    Array.from(
+                        { length: 3 },
+                        () => Array(9).fill(false)
+                    )
+            };
+        });
+
+        if (isAutoMarkEnabled) {
+            applyAutoMarkToAllTickets();
+        }
+
+        saveSessionState();
+
+        // Roster is presentation-only.
+        // Server registration remains authoritative.
+        const playerRef = doc(
+            db,
+            'artifacts',
+            appId,
+            'public',
+            'data',
+            `tambola_players_${roomCode}`,
+            currentUser.uid
+        );
+
+        try {
+            await setDoc(playerRef, {
+                ticketCount: tickets.length,
+                ticketNames: tickets.map(t => t.name),
+                serializedTickets: JSON.stringify(
+                    tickets.map(t => ({
+                        id: t.id,
+                        name: t.name,
+                        grid: t.grid,
+                        daubed: t.daubed
+                    }))
+                )
+            }, { merge: true });
+        } catch (rosterError) {
+            console.warn(
+                'Roster display update failed:',
+                rosterError
+            );
+        }
+
+        updateAllRoomUI();
+
+        const newTicket = tickets[tickets.length - 1];
+
+        showModal(
+            '🎟️',
+            'Ticket Added',
+            `Successfully added "${newTicket.name}"!`
+        );
+
+    } catch (err) {
+        console.error('Secure Add Ticket error:', err);
+
+        showModal(
+            '❌',
+            'Unable to Add Ticket',
+            err.message || 'Please try again.'
+        );
+    } finally {
+        if (addBtn) addBtn.disabled = false;
+    }
+}
+
 
         function renderPrizexOverviewTab() {
             const listEl = document.getElementById('prizex-overview-list');
