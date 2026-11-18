@@ -2332,34 +2332,92 @@ async function addNewPlayerTicket() {
             modal.classList.remove('hidden');
         }
 
-        async function resetRoomNumbers() {
-            if (!isHost) return;
-            calledNumbers = [];
-            currentNumber = null;
-            claimsStatus = {
-                "Early 5": null,
-                "Early 10": null,
-                "Top Line": null,
-                "Middle Line": null,
-                "Bottom Line": null,
-                "Full House": null
-            };
 
-            if (db) {
-                try {
-                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
-                    await updateDoc(roomRef, {
-                        calledNumbers: [],
-                        currentNumber: null,
-                        claims: claimsStatus
-                    });
-                } catch (err) {
-                    console.error("Error resetting Party:", err);
+        let resetNumbersInProgress = false;
+
+        async function resetRoomNumbers() {
+            if (!isHost || !roomCode) return;
+            if (resetNumbersInProgress) return;
+
+            resetNumbersInProgress = true;
+
+            try {
+                const user = await ensureAuth();
+
+                if (!auth?.currentUser || user?.isFallback) {
+                    throw new Error(
+                        'Firebase login is required to reset the board.'
+                    );
                 }
+
+                const idToken =
+                    await auth.currentUser.getIdToken();
+
+                const response = await fetch(
+                    `${TAMBOLA_API_BASE}/api/reset-numbers`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${idToken}`
+                        },
+                        body: JSON.stringify({ roomCode })
+                    }
+                );
+
+                const data = await response.json();
+
+                if (!response.ok || !data.ok) {
+                    throw new Error(
+                        data.error || 'Unable to reset the board.'
+                    );
+                }
+
+                // Update local state only after server confirmation.
+                calledNumbers = data.calledNumbers;
+                currentNumber = data.currentNumber;
+
+                claimsStatus = {
+                    'Early 5': null,
+                    'Early 10': null,
+                    'Top Line': null,
+                    'Middle Line': null,
+                    'Bottom Line': null,
+                    'Full House': null
+                };
+
+                // Remove old manual marks and reapply auto-marking
+                // against the newly reset called-number history.
+                tickets.forEach(ticket => {
+                    ticket.daubed = Array.from(
+                        { length: 3 },
+                        () => Array(9).fill(false)
+                    );
+                });
+
+                saveSessionState();
+                updateAllRoomUI();
+
+                showModal(
+                    '🔄',
+                    'Board Reset',
+                    'All called numbers and prize claims have been reset successfully.'
+                );
+
+            } catch (err) {
+                console.error('Secure reset error:', err);
+
+                showModal(
+                    '❌',
+                    'Reset Failed',
+                    err.message || 'Please try again.'
+                );
+
+            } finally {
+                resetNumbersInProgress = false;
             }
-            updateAllRoomUI();
-            showModal('🔄', 'Board Reset', 'The game board has been successfully reset.');
         }
+
 
         function returnToLobbyConfirm() {
             const modal = document.getElementById('custom-modal');
