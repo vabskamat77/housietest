@@ -1389,7 +1389,6 @@ const response = await fetch(
                 if (!raw) return;
                 const session = JSON.parse(raw);
                 if (!session || !session.roomCode) return;
-                if (!session.isHost && (!session.tickets || session.tickets.length === 0)) return;
 
                 if (Date.now() - session.savedAt > 12 * 3600 * 1000) {
                     clearSessionState();
@@ -1408,13 +1407,62 @@ const response = await fetch(
                     const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'tambola_rooms', roomCode);
                     const snap = await getDoc(roomRef);
                     if (snap.exists()) {
-                        const roomData = snap.data();
+                  const roomData = snap.data();
                         if (isPartyDocInactive(roomData)) {
                             clearSessionState();
                             roomCode = null;
                             return;
                         }
 
+
+if (!session.isHost && roomData.ticketMode === 'server') {
+    const registration = await registerTicketWithServer(
+        roomCode,
+        playerName,
+        'join'
+    );
+
+    // Preserve only local display preferences.
+    // Never trust locally stored ticket numbers.
+    const previousTickets = new Map(
+        (session.tickets || []).map(ticket => [
+            ticket.id,
+            ticket
+        ])
+    );
+
+    tickets = registration.tickets.map(serverTicket => {
+        const previous = previousTickets.get(serverTicket.id);
+
+        const validDaubs =
+            Array.isArray(previous?.daubed) &&
+            previous.daubed.length === 3 &&
+            previous.daubed.every(
+                row => Array.isArray(row) &&
+                       row.length === 9 &&
+                       row.every(value => typeof value === 'boolean')
+            );
+
+        return {
+            ...serverTicket,
+
+            // Ticket identity and numbers come from the server.
+            // Custom names and marks remain local preferences.
+            name: previous?.name || serverTicket.name,
+
+            daubed: validDaubs
+                ? previous.daubed
+                : Array.from(
+                    { length: 3 },
+                    () => Array(9).fill(false)
+                )
+        };
+    });
+
+    saveSessionState();
+}
+
+                        
                         activeHostTokenCode = roomData.hostToken || null;
                         maxRoomTickets = roomData.maxRoomTickets || 50;
                         calledNumbers = roomData.calledNumbers || [];
@@ -1426,6 +1474,10 @@ const response = await fetch(
                         if (roomData.restrictOnePrizePerTicket !== undefined) {
                             restrictOnePrizePerTicket = roomData.restrictOnePrizePerTicket;
                         }
+
+                        if (roomData.allowMultiTickets !== undefined) {
+    allowMultiTickets = roomData.allowMultiTickets;
+}
                         if (roomData.lockRoomNewPlayers !== undefined) {
                             lockRoomNewPlayers = roomData.lockRoomNewPlayers;
                             updateHostRuleUI();
@@ -1449,8 +1501,12 @@ const response = await fetch(
                     }
                 }
 
-                subscribeToRoom(roomCode);
-                enterGameRoomUI();
+if (isAutoMarkEnabled && !isHost) {
+    applyAutoMarkToAllTickets();
+}
+
+subscribeToRoom(roomCode);
+enterGameRoomUI();
             } catch (e) {
                 console.error("Auto-reconnect error:", e);
                 clearSessionState();
