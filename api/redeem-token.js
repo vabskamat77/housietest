@@ -148,7 +148,6 @@ export default async function handler(req, res) {
         roomCode,
         hostId: user.uid,
         hostName: 'Host',
-        hostToken: token,
         status: 'active',
         active: true,
         roomClosed: false,
