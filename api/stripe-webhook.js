@@ -188,41 +188,52 @@ export default async function handler(req, res) {
       }
     });
 
-    // Reuse the saved Host Token for duplicate Stripe events.
-    const saved = (await sessionRef.get()).data();
+    // Atomically claim the email once. Never automatically resubmit an
+    // uncertain delivery: Resend may have accepted it before a timeout.
+    const claim = await db.runTransaction(async tx => {
+      const snap = await tx.get(sessionRef);
+      const saved = snap.data();
 
-    if (!saved?.token) {
-      throw new Error('Paid session has no saved Host Token');
-    }
+      if (!saved?.token) {
+        throw new Error('Paid session has no saved Host Token');
+      }
 
-    if (saved.emailStatus === 'sent') {
-      return res.status(200).json({
-        received: true,
-        email: 'already_sent'
-      });
-    }
+      if (saved.emailStatus === 'sent') {
+        return { status: 'already_sent' };
+      }
 
-    // Support older payment records.
-    const recipient = saved.buyerEmail || buyerEmail;
+      if (
+        [
+          'sending',
+          'needs_review',
+          'failed',
+          'missing_buyer_email'
+        ].includes(saved.emailStatus)
+      ) {
+        return { status: saved.emailStatus };
+      }
 
-    if (!recipient) {
-      await sessionRef.set({
-        emailStatus: 'missing_buyer_email'
-      }, { merge: true });
+      // Old records with an email attempt but no definitive status
+      // must not be automatically retried.
+      if (saved.emailAttemptId || saved.emailLastAttemptAt) {
+        tx.update(sessionRef, {
+          emailStatus: 'needs_review'
+        });
 
-      console.error(
-        'Cannot send Host Token email: buyer email missing for',
-        sessionId
-      );
+        return { status: 'needs_review' };
+      }
 
-      return res.status(200).json({
-        received: true,
-        email: 'missing_buyer_email'
-      });
-    }
+      const recipient = saved.buyerEmail || buyerEmail;
 
-    try {
-      const { emailId } = await sendHostTokenEmail({
+      if (!recipient) {
+        tx.update(sessionRef, {
+          emailStatus: 'missing_buyer_email'
+        });
+
+        return { status: 'missing_buyer_email' };
+      }
+
+      const payload = {
         sessionId,
         buyerEmail: recipient,
         token: saved.token,
@@ -231,14 +242,36 @@ export default async function handler(req, res) {
         amountPaid: Number.isInteger(saved.amountPaid)
           ? saved.amountPaid
           : session.amount_total
+      };
+
+      // Freeze the complete payload before contacting the email provider.
+      tx.update(sessionRef, {
+        emailStatus: 'sending',
+        emailPayload: payload,
+        emailAttemptId: event.id,
+        emailLastAttemptAt:
+          admin.firestore.FieldValue.serverTimestamp()
       });
 
-      await sessionRef.set({
-        buyerEmail: recipient,
+      return { status: 'claimed', payload };
+    });
+
+    if (claim.status !== 'claimed') {
+      return res.status(200).json({
+        received: true,
+        email: claim.status
+      });
+    }
+
+    try {
+      const { emailId } = await sendHostTokenEmail(claim.payload);
+
+      await sessionRef.update({
         emailStatus: 'sent',
         resendEmailId: emailId,
-        emailSentAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
+        emailSentAt:
+          admin.firestore.FieldValue.serverTimestamp()
+      });
 
       return res.status(200).json({
         received: true,
@@ -247,25 +280,41 @@ export default async function handler(req, res) {
 
     } catch (emailErr) {
       console.error(
-        'Host Token email submission failed:',
+        'Host Token email outcome requires review:',
         sessionId,
         emailErr
       );
 
-      await sessionRef.set({
-        emailStatus: 'failed',
-        emailLastAttemptAt:
-          admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
+      // The email may already have been accepted by Resend.
+      // Do not automatically send another copy.
+      try {
+        await sessionRef.update({
+          emailStatus: 'needs_review',
+          emailError: String(
+            emailErr?.message || emailErr
+          ).slice(0, 500),
+          emailLastAttemptAt:
+            admin.firestore.FieldValue.serverTimestamp()
+        });
+      } catch (recordErr) {
+        console.error(
+          'Could not record email review status:',
+          sessionId,
+          recordErr
+        );
+      }
 
-      // A non-2xx response prompts Stripe to retry.
-      return res.status(500).send(
-        'Payment fulfilled; confirmation email submission failed'
-      );
+      return res.status(200).json({
+        received: true,
+        email: 'needs_review'
+      });
     }
 
   } catch (err) {
-    console.error('Stripe webhook fulfillment error:', err);
+    console.error(
+      'Stripe webhook fulfillment error:',
+      err
+    );
 
     return res.status(500).send(
       'Webhook fulfillment failed; Stripe may retry this event'
