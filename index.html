@@ -798,10 +798,10 @@ async function registerTicketWithServer(roomCode, playerName, action = 'join') {
         function saveHostingTokensDB() {}
 
         const STRIPE_PAYMENT_LINKS = {
-            STARTER: "https://buy.stripe.com/test_5kQ14n11meQm7Hd29F1oI00",
-            STANDARD: "https://buy.stripe.com/test_cNi28rh0kaA69Pl6pV1oI01",
-            MEGA: "https://buy.stripe.com/test_28E9AT25q4bI2mT7tZ1oI02"
-        };
+    STARTER: "https://buy.stripe.com/5kQ14n11meQm7Hd29F1oI00",
+    STANDARD: "https://buy.stripe.com/cNi28rh0kaA69Pl6pV1oI01",
+    MEGA: "https://buy.stripe.com/28E9AT25q4bI2mT7tZ1oI02"
+};
 
         function promptBuyTicketPackage(tierName, ticketCount, priceStr) {
             const paymentUrl = STRIPE_PAYMENT_LINKS[String(tierName || '').toUpperCase()];
@@ -824,7 +824,7 @@ async function registerTicketWithServer(roomCode, playerName, action = 'join') {
         async function checkStripePaymentReturn() {
             const params = new URLSearchParams(window.location.search);
             const sessionId = params.get('session_id');
-            if (!sessionId || params.get('payment') !== 'success') return;
+            if (!sessionId) return;
             showModal('⏳', 'Confirming Your Payment', 'Stripe is confirming your payment. Please keep this page open.');
             const messageEl = document.getElementById('modal-message');
             for (let attempt = 0; attempt < 15; attempt++) {
