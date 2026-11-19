@@ -1,9 +1,16 @@
-
-import { getDb, getStripe, setCors, requireMethod } from '../lib/server.js';
+import {
+  getDb,
+  getStripe,
+  setCors,
+  requireMethod
+} from '../lib/server.js';
 
 export default async function handler(req, res) {
   setCors(req, res);
+
   if (!requireMethod(req, res, 'GET')) return;
+
+  res.setHeader('Cache-Control', 'no-store');
 
   const sessionId = String(req.query.session_id || '');
 
@@ -12,8 +19,6 @@ export default async function handler(req, res) {
       error: 'Invalid Checkout Session ID'
     });
   }
-
-  res.setHeader('Cache-Control', 'no-store');
 
   try {
     const session = await getStripe()
@@ -34,7 +39,8 @@ export default async function handler(req, res) {
     if (!snap.exists || !snap.data()?.token) {
       return res.status(202).json({
         status: 'processing',
-        message: 'Payment confirmed. Host Token issuance is processing.'
+        message:
+          'Payment confirmed. Host Token issuance is processing.'
       });
     }
 
