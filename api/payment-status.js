@@ -13,6 +13,8 @@ export default async function handler(req, res) {
     });
   }
 
+  res.setHeader('Cache-Control', 'no-store');
+
   try {
     const session = await getStripe()
       .checkout.sessions.retrieve(sessionId);
@@ -24,8 +26,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const db = getDb();
-    const snap = await db
+    const snap = await getDb()
       .collection('stripe_payment_sessions')
       .doc(sessionId)
       .get();
