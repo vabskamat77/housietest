@@ -834,7 +834,7 @@ async function registerTicketWithServer(roomCode, playerName, action = 'join') {
                     if (response.ok && data.status === 'fulfilled' && data.token) {
                         const tokenInput = document.getElementById('host-token-input');
                         if (tokenInput) tokenInput.value = data.token;
-                        showModal('✅', `${data.tier || 'Package'} Activated!`, `Your Stripe payment was verified. Your single-use Host Token is:\n\n${data.token}\n\nCapacity: ${data.maxTickets} tickets.`);
+                        showModal('✅', `${data.tier || 'Package'} Activated!`, `Your Stripe payment was verified. Your single-use Host Token is:\n\n${data.token}\n\nCapacity: ${data.maxTickets} tickets.A confirmation email has been sent to your email address.`);
                         return;
                     }
                     if (response.status >= 400 && response.status !== 404 && response.status !== 202) {
