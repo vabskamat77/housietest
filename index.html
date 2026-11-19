@@ -825,29 +825,53 @@ async function registerTicketWithServer(roomCode, playerName, action = 'join') {
             const params = new URLSearchParams(window.location.search);
             const sessionId = params.get('session_id');
             if (!sessionId) return;
-            showModal('⏳', 'Confirming Your Payment', 'Stripe is confirming your payment. Please keep this page open.');
+
+            showModal('⏳', 'Verifying Your Payment', 'Checking your payment status securely. Please keep this page open.');
             const messageEl = document.getElementById('modal-message');
+
             for (let attempt = 0; attempt < 15; attempt++) {
                 try {
-                    const response = await fetch(`${TAMBOLA_API_BASE}/api/payment-status?session_id=${encodeURIComponent(sessionId)}`);
+                    const response = await fetch(
+                        `${TAMBOLA_API_BASE}/api/payment-status?session_id=${encodeURIComponent(sessionId)}`,
+                        { cache: 'no-store' }
+                    );
                     const data = await response.json();
-                    if (response.ok && data.status === 'fulfilled' && data.token) {
-                        const tokenInput = document.getElementById('host-token-input');
-                        if (tokenInput) tokenInput.value = data.token;
-                        showModal('✅', `${data.tier || 'Package'} Activated!`, `Your Stripe payment was verified. Your single-use Host Token is:\n\n${data.token}\n\nCapacity: ${data.maxTickets} tickets.A confirmation email has been sent to your email address.`);
+
+                    if (response.ok && data.status === 'fulfilled') {
+                        const capacity = Number.isInteger(data.maxTickets)
+                            ? ` Capacity: ${data.maxTickets} tickets.` : '';
+                        const emailMessage = data.emailStatus === 'sent'
+                            ? 'Your Host Token email was submitted for delivery. Please check your inbox and spam folder.'
+                            : 'Your Host Token email is being processed. Please check your inbox and spam folder. If it does not arrive, contact support.';
+                        showModal('✅', 'Payment Confirmed',
+                            `Your ${data.tier || 'Tambola'} payment was verified.${capacity} ${emailMessage}`);
                         return;
                     }
-                    if (response.status >= 400 && response.status !== 404 && response.status !== 202) {
-                        showModal('⚠️', 'Payment Not Confirmed', data.error || 'We could not verify this payment. Please contact support before trying again.');
+
+                    if (response.status === 402) {
+                        showModal('⏳', 'Payment Not Yet Confirmed',
+                            'Stripe has not confirmed payment for this checkout. If you completed payment, please wait or contact support before paying again.');
                         return;
                     }
-                    if (messageEl) messageEl.textContent = 'Payment received or processing. Waiting for the secure Firestore token to be issued…';
+
+                    if (response.status >= 400 && response.status !== 404) {
+                        showModal('⚠️', 'Unable to Verify Payment',
+                            'We could not verify this payment right now. Please contact support before trying again.');
+                        return;
+                    }
+
+                    if (messageEl) messageEl.textContent =
+                        'Payment is being verified and your Host Token is being prepared. Please wait…';
                 } catch (err) {
-                    if (messageEl) messageEl.textContent = 'Could not reach the payment verification server. Please refresh this page in a moment.';
+                    if (messageEl) messageEl.textContent =
+                        'The verification server is temporarily unavailable. Retrying…';
                 }
+
                 await new Promise(resolve => setTimeout(resolve, 2000));
             }
-            showModal('⏳', 'Payment Is Still Processing', 'Your payment may have succeeded, but the token has not appeared yet. Refresh this page shortly. Do not pay again unless Stripe shows that the first payment failed.');
+
+            showModal('⏳', 'Payment Verification Pending',
+                'We could not complete verification yet. Please check your email and contact support if your Host Token does not arrive. Do not pay again unless your first payment was confirmed unsuccessful.');
         }
 
         function getAllParticipantsList(roster) {
